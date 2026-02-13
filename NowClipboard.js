@@ -2,6 +2,7 @@
  * NowClipboard v1.1.0
  * Modern clipboard utility library - Clipboard API + execCommand fallback + Node.js adapter
  * Zero dependencies, supports both browser and Node.js environments
+ * 
  * Licensed MIT © Spicy-Mustard
  */
 (function (root, factory) {
