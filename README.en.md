@@ -414,27 +414,27 @@ NowClipboard prioritizes the modern [Clipboard API](https://developer.mozilla.or
   <thead>
     <tr>
       <td align="center" width="120">
-        <img src="https://raw.githubusercontent.com/nicedoc/browser-logos/refs/heads/master/src/chrome/chrome_64x64.png" width="48"><br>
+        <img src="https://raw.githubusercontent.com/alrra/browser-logos/main/src/chrome/chrome_64x64.png" width="48"><br>
         <b>Chrome</b>
       </td>
       <td align="center" width="120">
-        <img src="https://raw.githubusercontent.com/nicedoc/browser-logos/refs/heads/master/src/edge/edge_64x64.png" width="48"><br>
+        <img src="https://raw.githubusercontent.com/alrra/browser-logos/main/src/edge/edge_64x64.png" width="48"><br>
         <b>Edge</b>
       </td>
       <td align="center" width="120">
-        <img src="https://raw.githubusercontent.com/nicedoc/browser-logos/refs/heads/master/src/firefox/firefox_64x64.png" width="48"><br>
+        <img src="https://raw.githubusercontent.com/alrra/browser-logos/main/src/firefox/firefox_64x64.png" width="48"><br>
         <b>Firefox</b>
       </td>
       <td align="center" width="120">
-        <img src="https://raw.githubusercontent.com/nicedoc/browser-logos/refs/heads/master/src/safari/safari_64x64.png" width="48"><br>
+        <img src="https://raw.githubusercontent.com/alrra/browser-logos/main/src/safari/safari_64x64.png" width="48"><br>
         <b>Safari</b>
       </td>
       <td align="center" width="120">
-        <img src="https://raw.githubusercontent.com/nicedoc/browser-logos/refs/heads/master/src/opera/opera_64x64.png" width="48"><br>
+        <img src="https://raw.githubusercontent.com/alrra/browser-logos/main/src/opera/opera_64x64.png" width="48"><br>
         <b>Opera</b>
       </td>
       <td align="center" width="120">
-        <img src="https://raw.githubusercontent.com/nicedoc/browser-logos/refs/heads/master/src/archive/internet-explorer_9-11/internet-explorer_9-11_64x64.png" width="48"><br>
+        <img src="https://raw.githubusercontent.com/alrra/browser-logos/main/src/archive/internet-explorer_9-11/internet-explorer_9-11_64x64.png" width="48"><br>
         <b>IE</b>
       </td>
     </tr>
