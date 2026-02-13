@@ -42,10 +42,9 @@ npm install nowclipboard --save
 ### Browser
 
 ```html
-<!-- Development -->
+
 <script src="NowClipboard.js"></script>
 
-<!-- Production (recommended) -->
 <script src="NowClipboard.min.js"></script>
 ```
 
