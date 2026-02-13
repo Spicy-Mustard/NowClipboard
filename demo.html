@@ -280,6 +280,35 @@
       </div>
       <div id="result7" class="result">每次点击复制的内容都不同</div>
     </div>
+
+    <!-- 8. 图片复制 -->
+    <div class="card">
+      <h2>8. 图片复制 NowClipboard.copyImage()</h2>
+      <div class="row">
+        <canvas id="demoCanvas" width="240" height="100" style="border:1px solid #d4e5d4; border-radius:10px; background:#fff;"></canvas>
+        <button class="btn-primary" id="copyCanvasBtn">复制 Canvas 图片</button>
+      </div>
+      <div id="result8" class="result">复制图片到剪贴板（需要 HTTPS + 现代浏览器）</div>
+      <p class="note">注意：图片复制需要浏览器支持 ClipboardItem API，且通常需要 HTTPS 环境</p>
+    </div>
+
+    <!-- 9. 富文本复制 -->
+    <div class="card">
+      <h2>9. 富文本复制 NowClipboard.copyRich()</h2>
+      <div id="richContent" style="background:#fafcfa; border:1px solid #d4e5d4; border-radius:10px; padding:16px; margin-bottom:12px;">
+        <h3 style="color:#2d5a3d; margin-bottom:8px;">NowClipboard 示例标题</h3>
+        <p>这是一段包含 <strong>加粗</strong>、<em>斜体</em>、<span style="color:#e53935;">红色文字</span> 的富文本内容。</p>
+        <ul style="margin-top:8px; padding-left:20px;">
+          <li>支持 HTML 格式复制</li>
+          <li>粘贴到 Word / 邮件中保留样式</li>
+        </ul>
+      </div>
+      <div class="row">
+        <button class="btn-primary" id="copyRichStaticBtn">静态方法复制</button>
+        <button class="btn-success copy-btn" data-nc-target="#richContent" data-nc-html="true">属性绑定复制 (data-nc-html)</button>
+      </div>
+      <div id="result9" class="result">复制富文本，粘贴到 Word / 富文本编辑器中可保留格式</div>
+    </div>
   </div>
 
   <script src="NowClipboard.js"></script>
@@ -290,14 +319,28 @@
     var result2 = document.getElementById('result2');
 
     clipboard.on('success', function (e) {
-      var resultEl = e.action === 'cut' ? result2 : result1;
+      var resultEl;
+      if (e.action === 'cut') {
+        resultEl = result2;
+      } else if (e.trigger && e.trigger.getAttribute('data-nc-html') === 'true') {
+        resultEl = document.getElementById('result9');
+      } else {
+        resultEl = result1;
+      }
       resultEl.textContent = (e.action === 'copy' ? '复制' : '剪切') + '成功: ' + e.text;
       resultEl.className = 'result success';
       e.clearSelection();
     });
 
     clipboard.on('error', function (e) {
-      var resultEl = e.action === 'cut' ? result2 : result1;
+      var resultEl;
+      if (e.action === 'cut') {
+        resultEl = result2;
+      } else if (e.trigger && e.trigger.getAttribute('data-nc-html') === 'true') {
+        resultEl = document.getElementById('result9');
+      } else {
+        resultEl = result1;
+      }
       resultEl.textContent = '操作失败: ' + e.error.message;
       resultEl.className = 'result error';
     });
@@ -392,6 +435,51 @@
       }).catch(function (err) {
         result7.textContent = '复制失败: ' + err.message;
         result7.className = 'result error';
+      });
+    });
+
+    // 8. 图片复制
+    var demoCanvas = document.getElementById('demoCanvas');
+    var ctx = demoCanvas.getContext('2d');
+
+    // 绘制示例图形
+    ctx.fillStyle = '#e8f5e9';
+    ctx.fillRect(0, 0, 240, 100);
+    ctx.fillStyle = '#66bb6a';
+    ctx.beginPath();
+    ctx.arc(50, 50, 30, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#26a69a';
+    ctx.fillRect(100, 20, 60, 60);
+    ctx.fillStyle = '#2d5a3d';
+    ctx.font = '14px sans-serif';
+    ctx.fillText('Canvas', 175, 55);
+
+    var result8 = document.getElementById('result8');
+
+    document.getElementById('copyCanvasBtn').addEventListener('click', function () {
+      NowClipboard.copyImage(demoCanvas).then(function (blob) {
+        result8.textContent = '图片复制成功! 大小: ' + (blob.size / 1024).toFixed(1) + ' KB，可粘贴到聊天窗口或画图工具';
+        result8.className = 'result success';
+      }).catch(function (err) {
+        result8.textContent = '图片复制失败: ' + err.message;
+        result8.className = 'result error';
+      });
+    });
+
+    // 9. 富文本复制（静态方法）
+    var result9 = document.getElementById('result9');
+    var richContentEl = document.getElementById('richContent');
+
+    document.getElementById('copyRichStaticBtn').addEventListener('click', function () {
+      var html = richContentEl.innerHTML;
+      var text = richContentEl.textContent || richContentEl.innerText || '';
+      NowClipboard.copyRich({ text: text, html: html }).then(function (res) {
+        result9.textContent = '富文本复制成功! 纯文本长度: ' + res.text.length + '，HTML 长度: ' + res.html.length;
+        result9.className = 'result success';
+      }).catch(function (err) {
+        result9.textContent = '富文本复制失败: ' + err.message;
+        result9.className = 'result error';
       });
     });
   </script>
