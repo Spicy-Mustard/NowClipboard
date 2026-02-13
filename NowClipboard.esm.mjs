@@ -1,7 +1,6 @@
 /**
  * NowClipboard v1.1.3
  * Modern clipboard utility library - Clipboard API + execCommand fallback + Node.js adapter
- * 
  * Licensed MIT © Spicy-Mustard
  */
 'use strict';
