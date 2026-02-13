@@ -1,4 +1,4 @@
-// NowClipboard TypeScript 类型定义
+// NowClipboard TypeScript type definition
 
 export interface RetryOptions {
   /** 最大重试次数，默认 2 */
