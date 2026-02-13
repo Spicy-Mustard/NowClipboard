@@ -1,12 +1,12 @@
 /**
  * NowClipboard (ESM)
- * 现代剪贴板工具库 - 基于 Clipboard API + execCommand 降级 + Node.js 适配
- * 零依赖，支持浏览器和 Node.js 环境
+ * Modern clipboard utility library - Clipboard API + execCommand fallback + Node.js adapter
+ * Zero dependencies, supports both browser and Node.js environments
  */
 'use strict';
 
   // ========================================
-  // 1. 工具函数 & 环境检测
+  // 1. Utility Functions & Environment Detection
   // ========================================
 
   var _isBrowser = typeof window !== 'undefined' && typeof document !== 'undefined';
@@ -31,7 +31,7 @@
   }
 
   /**
-   * 检测现代 Clipboard API 是否可用
+   * Check if modern Clipboard API is available
    */
   function isClipboardAPIAvailable() {
     return _isBrowser &&
@@ -41,7 +41,7 @@
   }
 
   /**
-   * 检测 ClipboardItem API 是否可用（用于图片/富文本复制）
+   * Check if ClipboardItem API is available (for image/rich text copy)
    */
   function isClipboardItemSupported() {
     return _isBrowser &&
@@ -52,7 +52,7 @@
   }
 
   /**
-   * 检测 execCommand 是否支持指定操作
+   * Check if execCommand supports the specified action
    */
   function isExecCommandSupported(action) {
     if (!_isBrowser) return false;
@@ -64,7 +64,7 @@
   }
 
   // ========================================
-  // 2. EventEmitter - 事件发射器
+  // 2. EventEmitter
   // ========================================
 
   function EventEmitter() {
@@ -114,7 +114,7 @@
     for (var i = 1; i < arguments.length; i++) {
       args.push(arguments[i]);
     }
-    // 复制一份，防止回调中修改数组
+    // Clone to prevent modification during callbacks
     var listeners = events.slice();
     var toRemove = [];
     for (var j = 0; j < listeners.length; j++) {
@@ -123,7 +123,7 @@
         toRemove.push(listeners[j]);
       }
     }
-    // 移除一次性监听器
+    // Remove one-time listeners
     if (toRemove.length) {
       var remaining = [];
       for (var k = 0; k < events.length; k++) {
@@ -146,11 +146,11 @@
   };
 
   // ========================================
-  // 3. 选择器引擎 - 文本选取
+  // 3. Selection Engine - Text Selection
   // ========================================
 
   /**
-   * 选中元素中的文本并返回其内容
+   * Select text in element and return its content
    */
   function selectText(element) {
     var text = '';
@@ -168,7 +168,7 @@
       try {
         element.setSelectionRange(0, element.value.length);
       } catch (e) {
-        // 某些 input type 不支持 setSelectionRange
+        // Some input types don't support setSelectionRange
       }
       if (!isReadOnly) {
         element.removeAttribute('readonly');
@@ -190,7 +190,7 @@
   }
 
   /**
-   * 创建屏幕外隐藏 textarea 用于降级复制
+   * Create offscreen hidden textarea for fallback copy
    */
   function createOffscreenArea(text) {
     var el = document.createElement('textarea');
@@ -213,7 +213,7 @@
   }
 
   /**
-   * 清除当前页面选区
+   * Clear current page selection
    */
   function clearSelection() {
     try {
@@ -226,16 +226,16 @@
         }
       }
     } catch (e) {
-      // 忽略
+      // ignore
     }
   }
 
   // ========================================
-  // 4. 剪贴板操作核心
+  // 4. Clipboard Operations Core
   // ========================================
 
   /**
-   * 使用现代 Clipboard API 复制文本
+   * Copy text using modern Clipboard API
    */
   function modernCopy(text) {
     return navigator.clipboard.writeText(text).then(function () {
@@ -244,7 +244,7 @@
   }
 
   /**
-   * 使用 execCommand 降级复制文本
+   * Copy text using execCommand fallback
    */
   function legacyCopy(text, container) {
     var fakeEl = createOffscreenArea(text);
@@ -270,7 +270,7 @@
   }
 
   /**
-   * 使用 execCommand 降级复制元素中的文本
+   * Copy text from element using execCommand fallback
    */
   function legacyCopyFromElement(element, container) {
     var text = selectText(element);
@@ -284,12 +284,12 @@
     if (succeeded) {
       return resolvedPromise(text);
     }
-    // 降级：通过临时元素复制
+    // Fallback: copy via temporary element
     return legacyCopy(text, container);
   }
 
   /**
-   * 剪切元素中的内容
+   * Cut content from element
    */
   function performCut(element) {
     var text = selectText(element);
@@ -304,9 +304,9 @@
       return resolvedPromise(text);
     }
 
-    // 降级：先复制再手动清空
+    // Fallback: copy first, then clear manually
     return copyText(text).then(function (copiedText) {
-      // 清空可编辑元素内容
+      // Clear editable element content
       var nodeName = element.nodeName;
       if (nodeName === 'INPUT' || nodeName === 'TEXTAREA') {
         element.value = '';
@@ -318,17 +318,17 @@
   }
 
   /**
-   * 统一的复制入口：自动选择最佳方式，支持重试
+   * Unified copy entry: auto-selects best method with retry support
    */
   function copyText(text, options) {
     var opts = options || {};
     var container = opts.container || (_isBrowser ? document.body : null);
 
     return retryOperation(function () {
-      // 优先使用现代 API
+      // Prefer modern API
       if (isClipboardAPIAvailable()) {
         return modernCopy(text).catch(function () {
-          // 现代 API 失败，降级到 execCommand
+          // Modern API failed, fallback to execCommand
           if (_isBrowser) {
             return legacyCopy(text, container);
           }
@@ -336,12 +336,12 @@
         });
       }
 
-      // 降级方案
+      // Fallback
       if (_isBrowser) {
         return legacyCopy(text, container);
       }
 
-      // Node.js 环境
+      // Node.js environment
       if (_isNode) {
         return nodeClipboardCopy(text);
       }
@@ -351,14 +351,14 @@
   }
 
   /**
-   * 从元素中复制文本
+   * Copy text from element
    */
   function copyFromElement(element, options) {
     var opts = options || {};
     var container = opts.container || document.body;
 
     return retryOperation(function () {
-      // 先获取文本
+      // Get text first
       var text = selectText(element);
 
       if (isClipboardAPIAvailable()) {
@@ -373,7 +373,7 @@
   }
 
   /**
-   * 使用现代 Clipboard API 读取剪贴板文本
+   * Read clipboard text using modern Clipboard API
    * @returns {Promise<string>}
    */
   function modernRead() {
@@ -381,22 +381,22 @@
   }
 
   /**
-   * 统一的读取入口：自动选择最佳方式，支持重试
-   * @param {Object} [options] - 配置项（retries/retryDelay/timeout）
+   * Unified read entry: auto-selects best method with retry support
+   * @param {Object} [options] - Options (retries/retryDelay/timeout)
    * @returns {Promise<string>}
    */
   function readText(options) {
     var opts = options || {};
 
     return retryOperation(function () {
-      // 浏览器：使用现代 Clipboard API
+      // Browser: use modern Clipboard API
       if (_isBrowser && typeof navigator !== 'undefined' &&
           navigator.clipboard != null &&
           typeof navigator.clipboard.readText === 'function') {
         return modernRead();
       }
 
-      // Node.js 环境
+      // Node.js environment
       if (_isNode) {
         return nodeClipboardRead();
       }
@@ -406,16 +406,16 @@
   }
 
   // ========================================
-  // 4.1 图片/Blob 复制
+  // 4.1 Image/Blob Copy
   // ========================================
 
   /**
-   * 将各种图片源转换为 Blob
+   * Convert various image sources to Blob
    * @param {Blob|File|HTMLImageElement|HTMLCanvasElement|string} source
    * @returns {Promise<Blob>}
    */
   function fetchImageBlob(source) {
-    // Blob 或 File 直接返回
+    // Blob or File: return directly
     if (source instanceof Blob) {
       return resolvedPromise(source);
     }
@@ -453,7 +453,7 @@
       });
     }
 
-    // URL 字符串
+    // URL string
     if (_isString(source)) {
       return fetch(source).then(function (response) {
         if (!response.ok) {
@@ -469,7 +469,7 @@
   }
 
   /**
-   * 通过 ClipboardItem 复制 Blob 到剪贴板
+   * Copy Blob to clipboard via ClipboardItem
    * @param {Blob} blob
    * @param {string} mimeType
    * @returns {Promise<Blob>}
@@ -485,9 +485,9 @@
   }
 
   /**
-   * 复制图片统一入口（支持重试）
+   * Unified image copy entry (with retry support)
    * @param {Blob|File|HTMLImageElement|HTMLCanvasElement|string} source
-   * @param {Object} [options] - 重试配置
+   * @param {Object} [options] - Retry options
    * @returns {Promise<Blob>}
    */
   function copyImage(source, options) {
@@ -499,13 +499,13 @@
   }
 
   // ========================================
-  // 4.2 富文本复制（HTML + 纯文本）
+  // 4.2 Rich Text Copy (HTML + Plain Text)
   // ========================================
 
   /**
-   * 使用 ClipboardItem 复制富文本（现代方式）
-   * @param {string} text - 纯文本
-   * @param {string} html - HTML 内容
+   * Copy rich text using ClipboardItem (modern method)
+   * @param {string} text - Plain text
+   * @param {string} html - HTML content
    * @returns {Promise<{text: string, html: string}>}
    */
   function copyRichTextModern(text, html) {
@@ -521,9 +521,9 @@
   }
 
   /**
-   * 使用 execCommand 降级复制富文本
-   * @param {string} text - 纯文本
-   * @param {string} html - HTML 内容
+   * Copy rich text using execCommand fallback
+   * @param {string} text - Plain text
+   * @param {string} html - HTML content
    * @param {Element} [container]
    * @returns {Promise<{text: string, html: string}>}
    */
@@ -567,7 +567,7 @@
   }
 
   /**
-   * 复制富文本统一入口（支持重试）
+   * Unified rich text copy entry (with retry support)
    * @param {Object} options - { text, html, container?, retries?, retryDelay?, timeout? }
    * @returns {Promise<{text: string, html: string}>}
    */
@@ -587,8 +587,8 @@
   }
 
   /**
-   * 解析重试配置，合并默认值
-   * @param {Object|number} [options] - 配置对象或重试次数
+   * Parse retry config, merge with defaults
+   * @param {Object|number} [options] - Config object or retry count
    * @returns {{ retries: number, retryDelay: number, timeout: number }}
    */
   function parseRetryConfig(options) {
@@ -604,9 +604,9 @@
   }
 
   /**
-   * 为 Promise 添加超时限制
-   * @param {Promise} promise - 原始 Promise
-   * @param {number} ms - 超时毫秒数，<=0 不限制
+   * Add timeout to Promise
+   * @param {Promise} promise - Original Promise
+   * @param {number} ms - Timeout in ms, <=0 means no limit
    * @returns {Promise}
    */
   function withTimeout(promise, ms) {
@@ -626,9 +626,9 @@
   }
 
   /**
-   * 重试机制（指数退避），支持配置化重试次数、延迟和超时
-   * @param {Function} fn - 返回 Promise 的操作函数
-   * @param {Object|number} config - 配置对象或最大重试次数（向后兼容）
+   * Retry mechanism (exponential backoff) with configurable retries, delay and timeout
+   * @param {Function} fn - Function that returns a Promise
+   * @param {Object|number} config - Config object or max retries (backward compatible)
    */
   function retryOperation(fn, config) {
     var cfg = parseRetryConfig(config);
@@ -651,11 +651,11 @@
   }
 
   // ========================================
-  // 5. Node.js 适配器
+  // 5. Node.js Adapter
   // ========================================
 
   /**
-   * Node.js 环境下复制文本到系统剪贴板
+   * Copy text to system clipboard in Node.js environment
    */
   function nodeClipboardCopy(text) {
     if (!_isNode) {
@@ -673,7 +673,7 @@
         cmd = 'pbcopy';
         args = [];
       } else {
-        // Linux: 尝试 xclip
+        // Linux: try xclip
         cmd = 'xclip';
         args = ['-selection', 'clipboard'];
       }
@@ -687,7 +687,7 @@
           if (!finished) {
             finished = true;
             if (platform !== 'win32' && platform !== 'darwin') {
-              // Linux 降级尝试 xsel
+              // Linux: fallback to xsel
               nodeClipboardCopyFallback(text).then(resolve, reject);
             } else {
               reject(new Error('Clipboard command failed: ' + cmd + ' - ' + err.message));
@@ -715,7 +715,7 @@
   }
 
   /**
-   * Linux 降级方案：使用 xsel
+   * Linux fallback: use xsel
    */
   function nodeClipboardCopyFallback(text) {
     return new Promise(function (resolve, reject) {
@@ -751,7 +751,7 @@
   }
 
   /**
-   * Node.js 环境下从系统剪贴板读取文本
+   * Read text from system clipboard in Node.js environment
    * @returns {Promise<string>}
    */
   function nodeClipboardRead() {
@@ -770,7 +770,7 @@
         cmd = 'pbpaste';
         args = [];
       } else {
-        // Linux: 尝试 xclip
+        // Linux: try xclip
         cmd = 'xclip';
         args = ['-selection', 'clipboard', '-o'];
       }
@@ -789,7 +789,7 @@
           if (!finished) {
             finished = true;
             if (platform !== 'win32' && platform !== 'darwin') {
-              // Linux 降级尝试 xsel
+              // Linux: fallback to xsel
               nodeClipboardReadFallback().then(resolve, reject);
             } else {
               reject(new Error('Clipboard read command failed: ' + cmd + ' - ' + err.message));
@@ -801,7 +801,7 @@
           if (!finished) {
             finished = true;
             if (code === 0) {
-              // Windows PowerShell 输出可能带尾部换行
+              // Windows PowerShell output may have trailing newline
               resolve(platform === 'win32' ? output.replace(/\r?\n$/, '') : output);
             } else {
               reject(new Error('Clipboard read command exited with code: ' + code));
@@ -815,7 +815,7 @@
   }
 
   /**
-   * Linux 读取降级方案：使用 xsel
+   * Linux read fallback: use xsel
    * @returns {Promise<string>}
    */
   function nodeClipboardReadFallback() {
@@ -854,7 +854,7 @@
   }
 
   // ========================================
-  // 6. Promise 辅助（兼容旧环境）
+  // 6. Promise Helpers
   // ========================================
 
   function resolvedPromise(val) {
@@ -866,8 +866,8 @@
   }
 
   /**
-   * 查询剪贴板权限状态
-   * @param {string} permissionName - 权限名称（'clipboard-read' 或 'clipboard-write'）
+   * Query clipboard permission status
+   * @param {string} permissionName - Permission name ('clipboard-read' or 'clipboard-write')
    * @returns {Promise<{ state: string }>}
    */
   function queryClipboardPermission(permissionName) {
@@ -887,11 +887,11 @@
   }
 
   // ========================================
-  // 7. DOM 属性绑定 & 事件委托
+  // 7. DOM Attribute Binding & Event Delegation
   // ========================================
 
   /**
-   * 获取元素的 data-nc-* 属性值
+   * Get element's data-nc-* attribute value
    */
   function getAttr(name, element) {
     var attr = 'data-nc-' + name;
@@ -902,13 +902,13 @@
   }
 
   /**
-   * 查找最近的匹配选择器的祖先元素（含自身）
+   * Find closest ancestor matching selector (including self)
    */
   function closest(element, selector) {
     if (element.closest) {
       return element.closest(selector);
     }
-    // 降级方案
+    // Fallback
     var el = element;
     while (el && el.nodeType === 1) {
       if (matches(el, selector)) return el;
@@ -924,7 +924,7 @@
   }
 
   /**
-   * 事件委托 - 在容器上监听事件，委托给匹配选择器的子元素
+   * Event delegation - listen on container, delegate to matching child elements
    */
   function delegateEvent(container, selector, eventType, handler) {
     function listener(e) {
@@ -945,11 +945,11 @@
   }
 
   /**
-   * 绑定事件监听 - 支持选择器字符串、Element、NodeList
+   * Bind event listener - supports selector string, Element, NodeList
    */
   function bindListener(target, eventType, handler) {
     if (_isString(target)) {
-      // 选择器 → 事件委托
+      // Selector -> event delegation
       return delegateEvent(document.body, target, eventType, handler);
     }
 
@@ -985,29 +985,29 @@
   }
 
   /**
-   * 从 paste 事件的 clipboardData 中提取数据
-   * @param {DataTransfer} clipboardData - 事件的 clipboardData 对象
+   * Extract data from paste event's clipboardData
+   * @param {DataTransfer} clipboardData - Event's clipboardData object
    * @returns {{ text: string, html: string, files: File[] }}
    */
   function parsePasteData(clipboardData) {
     var result = { text: '', html: '', files: [] };
     if (!clipboardData) return result;
 
-    try { result.text = clipboardData.getData('text/plain') || ''; } catch (e) { /* 忽略 */ }
-    try { result.html = clipboardData.getData('text/html') || ''; } catch (e) { /* 忽略 */ }
+    try { result.text = clipboardData.getData('text/plain') || ''; } catch (e) { /* ignore */ }
+    try { result.html = clipboardData.getData('text/html') || ''; } catch (e) { /* ignore */ }
     try {
       if (clipboardData.files && clipboardData.files.length > 0) {
         result.files = Array.prototype.slice.call(clipboardData.files);
       }
-    } catch (e) { /* 忽略 */ }
+    } catch (e) { /* ignore */ }
 
     return result;
   }
 
   /**
-   * 绑定粘贴事件监听
-   * @param {string|Element|null} target - 选择器、元素或 null（默认 document）
-   * @param {Function} callback - 回调函数，接收 { text, html, files, originalEvent }
+   * Bind paste event listener
+   * @param {string|Element|null} target - Selector, element, or null (defaults to document)
+   * @param {Function} callback - Callback, receives { text, html, files, originalEvent }
    * @returns {{ destroy: Function }}
    */
   function bindPasteListener(target, callback) {
@@ -1023,7 +1023,7 @@
       callback(data);
     }
 
-    // null / undefined → document
+    // null / undefined -> document
     if (target == null) {
       document.addEventListener('paste', pasteHandler, false);
       return {
@@ -1033,7 +1033,7 @@
       };
     }
 
-    // 选择器字符串 → 事件委托
+    // Selector string -> event delegation
     if (_isString(target)) {
       return delegateEvent(document.body, target, 'paste', pasteHandler);
     }
@@ -1052,17 +1052,17 @@
   }
 
   // ========================================
-  // 8. NowClipboard 主类
+  // 8. NowClipboard Main Class
   // ========================================
 
   /**
-   * NowClipboard 构造函数
-   * @param {string|Element|NodeList} trigger - 触发元素或选择器
-   * @param {Object} [options] - 配置项
-   * @param {Function|string} [options.action] - 操作类型（copy/cut）
-   * @param {Function} [options.target] - 获取目标元素的函数
-   * @param {Function|string} [options.text] - 获取复制文本的函数或字符串
-   * @param {Element} [options.container] - 容器元素（默认 document.body）
+   * NowClipboard constructor
+   * @param {string|Element|NodeList} trigger - Trigger element or selector
+   * @param {Object} [options] - Options
+   * @param {Function|string} [options.action] - Action type (copy/cut)
+   * @param {Function} [options.target] - Function to get target element
+   * @param {Function|string} [options.text] - Function or string to get copy text
+   * @param {Element} [options.container] - Container element (defaults to document.body)
    */
   function NowClipboard(trigger, options) {
     if (!(this instanceof NowClipboard)) {
@@ -1080,12 +1080,12 @@
     }
   }
 
-  // 继承 EventEmitter
+  // Inherit EventEmitter
   NowClipboard.prototype = Object.create(EventEmitter.prototype);
   NowClipboard.prototype.constructor = NowClipboard;
 
   /**
-   * 解析配置项
+   * Resolve options
    */
   NowClipboard.prototype.resolveOptions = function (opts) {
     this.action = _isFunction(opts.action) ? opts.action : this.defaultAction;
@@ -1098,7 +1098,7 @@
   };
 
   /**
-   * 绑定点击事件
+   * Bind click event
    */
   NowClipboard.prototype.listenClick = function (trigger) {
     var self = this;
@@ -1108,7 +1108,7 @@
   };
 
   /**
-   * 点击事件处理
+   * Click event handler
    */
   NowClipboard.prototype.onClick = function (e) {
     var trigger = e.delegateTarget || e.currentTarget;
@@ -1117,7 +1117,7 @@
     var text = this.text(trigger);
     var self = this;
 
-    // 验证操作类型
+    // Validate action type
     if (actionName !== 'copy' && actionName !== 'cut') {
       self.emit('error', {
         action: actionName,
@@ -1128,18 +1128,18 @@
       return;
     }
 
-    // 确定操作
+    // Determine operation
     var operationPromise;
 
-    // 检查是否为富文本复制模式 (data-nc-html="true")
+    // Check if rich text copy mode (data-nc-html="true")
     var isRichCopy = getAttr('html', trigger) === 'true';
 
     if (text) {
-      // 有指定文本，直接复制
+      // Text specified, copy directly
       operationPromise = copyText(text, { container: self.container, retries: self.retries, retryDelay: self.retryDelay, timeout: self.timeout });
     } else if (targetEl) {
       if (actionName === 'cut') {
-        // 验证剪切操作的元素
+        // Validate element for cut operation
         if (targetEl.hasAttribute('readonly') || targetEl.hasAttribute('disabled')) {
           self.emit('error', {
             action: actionName,
@@ -1151,7 +1151,7 @@
         }
         operationPromise = performCut(targetEl);
       } else if (isRichCopy) {
-        // 富文本复制：同时复制 HTML 和纯文本
+        // Rich text copy: copy HTML and plain text simultaneously
         var richHtml = targetEl.innerHTML;
         var richText = targetEl.textContent || targetEl.innerText || '';
         operationPromise = copyRichText({
@@ -1165,7 +1165,7 @@
           return result.text;
         });
       } else {
-        // 检查 disabled 属性
+        // Check disabled attribute
         if (targetEl.hasAttribute('disabled')) {
           self.emit('error', {
             action: actionName,
@@ -1205,14 +1205,14 @@
   };
 
   /**
-   * 默认操作：从 data-nc-action 属性获取
+   * Default action: get from data-nc-action attribute
    */
   NowClipboard.prototype.defaultAction = function (trigger) {
     return getAttr('action', trigger) || 'copy';
   };
 
   /**
-   * 默认目标：从 data-nc-target 属性获取
+   * Default target: get from data-nc-target attribute
    */
   NowClipboard.prototype.defaultTarget = function (trigger) {
     var selector = getAttr('target', trigger);
@@ -1223,14 +1223,14 @@
   };
 
   /**
-   * 默认文本：从 data-nc-text 属性获取
+   * Default text: get from data-nc-text attribute
    */
   NowClipboard.prototype.defaultText = function (trigger) {
     return getAttr('text', trigger);
   };
 
   /**
-   * 销毁实例，清理所有资源
+   * Destroy instance, clean up all resources
    */
   NowClipboard.prototype.destroy = function () {
     if (this._destroyed) return;
@@ -1249,13 +1249,13 @@
   };
 
   // ========================================
-  // 9. 静态方法
+  // 9. Static Methods
   // ========================================
 
   /**
-   * 静态复制方法 - 直接复制文本
-   * @param {string} text - 要复制的文本
-   * @param {Object} [options] - 配置项
+   * Static copy method - copy text directly
+   * @param {string} text - Text to copy
+   * @param {Object} [options] - Options
    * @returns {Promise<string>}
    */
   NowClipboard.copy = function (text, options) {
@@ -1266,8 +1266,8 @@
   };
 
   /**
-   * 静态剪切方法 - 剪切元素内容
-   * @param {Element} element - 目标元素
+   * Static cut method - cut element content
+   * @param {Element} element - Target element
    * @returns {Promise<string>}
    */
   NowClipboard.cut = function (element) {
@@ -1281,8 +1281,8 @@
   };
 
   /**
-   * 静态读取方法 - 读取剪贴板文本
-   * @param {Object} [options] - 配置项（retries/retryDelay/timeout）
+   * Static read method - read clipboard text
+   * @param {Object} [options] - Options (retries/retryDelay/timeout)
    * @returns {Promise<string>}
    */
   NowClipboard.read = function (options) {
@@ -1290,19 +1290,19 @@
   };
 
   /**
-   * 检测当前环境是否支持剪贴板操作
-   * @param {string|string[]} [actions] - 要检测的操作（默认 ['copy', 'cut']）
+   * Check if current environment supports clipboard operations
+   * @param {string|string[]} [actions] - Actions to check (default: ['copy', 'cut'])
    * @returns {boolean}
    */
   NowClipboard.checkSupport = function (actions) {
-    if (_isNode) return true; // Node.js 通过系统命令支持
+    if (_isNode) return true; // Node.js supported via system commands
 
     if (!_isBrowser) return false;
 
-    // 现代 Clipboard API 可用
+    // Modern Clipboard API available
     if (isClipboardAPIAvailable()) return true;
 
-    // 检测 execCommand 支持
+    // Check execCommand support
     var actionList = actions || ['copy', 'cut'];
     if (_isString(actionList)) actionList = [actionList];
 
@@ -1314,8 +1314,8 @@
   };
 
   /**
-   * 查询剪贴板权限状态
-   * @param {string} name - 权限名称：'read' 或 'write'
+   * Query clipboard permission status
+   * @param {string} name - Permission name: 'read' or 'write'
    * @returns {Promise<{ state: string }>} state: 'granted'|'denied'|'prompt'
    */
   NowClipboard.queryPermission = function (name) {
@@ -1329,9 +1329,9 @@
   };
 
   /**
-   * 静态粘贴监听方法 - 监听粘贴事件
-   * @param {string|Element|null} target - 选择器、元素或 null（默认 document）
-   * @param {Function} callback - 回调函数，接收 { text, html, files, originalEvent, trigger }
+   * Static paste listener - listen to paste events
+   * @param {string|Element|null} target - Selector, element, or null (defaults to document)
+   * @param {Function} callback - Callback, receives { text, html, files, originalEvent, trigger }
    * @returns {{ destroy: Function }}
    */
   NowClipboard.onPaste = function (target, callback) {
@@ -1342,9 +1342,9 @@
   };
 
   /**
-   * 复制图片到剪贴板（仅浏览器，需要 HTTPS + 现代浏览器）
-   * @param {Blob|File|HTMLImageElement|HTMLCanvasElement|string} source - 图片源
-   * @param {Object} [options] - 重试配置
+   * Copy image to clipboard (browser only, requires HTTPS + modern browser)
+   * @param {Blob|File|HTMLImageElement|HTMLCanvasElement|string} source - Image source
+   * @param {Object} [options] - Retry options
    * @returns {Promise<Blob>}
    */
   NowClipboard.copyImage = function (source, options) {
@@ -1358,10 +1358,10 @@
   };
 
   /**
-   * 复制任意 Blob 到剪贴板（仅浏览器）
-   * @param {Blob} blob - Blob 数据
-   * @param {string} [mimeType] - MIME 类型，默认使用 blob.type
-   * @param {Object} [options] - 重试配置
+   * Copy any Blob to clipboard (browser only)
+   * @param {Blob} blob - Blob data
+   * @param {string} [mimeType] - MIME type, defaults to blob.type
+   * @param {Object} [options] - Retry options
    * @returns {Promise<Blob>}
    */
   NowClipboard.copyBlob = function (blob, mimeType, options) {
@@ -1381,7 +1381,7 @@
   };
 
   /**
-   * 复制富文本（HTML + 纯文本）到剪贴板（仅浏览器）
+   * Copy rich text (HTML + plain text) to clipboard (browser only)
    * @param {Object} options - { text: string, html: string, container?, retries?, retryDelay?, timeout? }
    * @returns {Promise<{text: string, html: string}>}
    */
@@ -1396,7 +1396,7 @@
   };
 
 // ========================================
-// ESM 导出
+// ESM Exports
 // ========================================
 
 var _copy = NowClipboard.copy;
