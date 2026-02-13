@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NowClipboard Demo</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 40px 20px;
+    }
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    h1 {
+      color: #fff;
+      text-align: center;
+      margin-bottom: 10px;
+      font-size: 2.5em;
+    }
+    .subtitle {
+      color: rgba(255,255,255,0.8);
+      text-align: center;
+      margin-bottom: 40px;
+    }
+    .card {
+      background: #fff;
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 20px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+    }
+    .card h2 {
+      color: #333;
+      margin-bottom: 16px;
+      font-size: 1.2em;
+      border-bottom: 2px solid #667eea;
+      padding-bottom: 8px;
+    }
+    .row {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+    input, textarea {
+      flex: 1;
+      min-width: 200px;
+      padding: 12px;
+      border: 2px solid #e0e0e0;
+      border-radius: 8px;
+      font-size: 14px;
+      transition: border-color 0.3s;
+    }
+    input:focus, textarea:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+    textarea {
+      resize: vertical;
+      min-height: 80px;
+    }
+    button {
+      padding: 12px 24px;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s;
+      white-space: nowrap;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: #fff;
+    }
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    }
+    .btn-success {
+      background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+      color: #fff;
+    }
+    .btn-success:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(56, 239, 125, 0.4);
+    }
+    .btn-warning {
+      background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+      color: #fff;
+    }
+    .btn-warning:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(245, 87, 108, 0.4);
+    }
+    .btn-info {
+      background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+      color: #fff;
+    }
+    .btn-info:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(79, 172, 254, 0.4);
+    }
+    .result {
+      background: #f8f9fa;
+      border-radius: 8px;
+      padding: 12px 16px;
+      margin-top: 12px;
+      font-size: 14px;
+      color: #666;
+      min-height: 44px;
+      display: flex;
+      align-items: center;
+    }
+    .result.success {
+      background: #d4edda;
+      color: #155724;
+    }
+    .result.error {
+      background: #f8d7da;
+      color: #721c24;
+    }
+    .paste-area {
+      border: 2px dashed #667eea;
+      border-radius: 8px;
+      padding: 24px;
+      text-align: center;
+      color: #667eea;
+      background: #f8f9ff;
+      transition: all 0.3s;
+    }
+    .paste-area:focus {
+      outline: none;
+      border-color: #764ba2;
+      background: #f0f0ff;
+    }
+    .paste-result {
+      margin-top: 12px;
+      text-align: left;
+    }
+    .permission-status {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      margin-left: 8px;
+    }
+    .permission-granted {
+      background: #d4edda;
+      color: #155724;
+    }
+    .permission-denied {
+      background: #f8d7da;
+      color: #721c24;
+    }
+    .permission-prompt {
+      background: #fff3cd;
+      color: #856404;
+    }
+    .permission-unsupported {
+      background: #e2e3e5;
+      color: #383d41;
+    }
+    code {
+      background: #f1f1f1;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: "SF Mono", Monaco, "Consolas", monospace;
+      font-size: 13px;
+    }
+    .note {
+      font-size: 12px;
+      color: #888;
+      margin-top: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>NowClipboard</h1>
+    <p class="subtitle">现代剪贴板工具库 - 零依赖，支持浏览器和 Node.js</p>
+
+    <!-- 1. HTML 属性绑定 -->
+    <div class="card">
+      <h2>1. HTML 属性绑定 (data-nc-*)</h2>
+      <div class="row">
+        <input type="text" id="source1" value="这是输入框的内容">
+        <button class="btn-primary copy-btn" data-nc-target="#source1">复制输入框</button>
+      </div>
+      <div class="row">
+        <button class="btn-primary copy-btn" data-nc-text="Hello NowClipboard!">复制固定文本</button>
+        <code>data-nc-text="Hello NowClipboard!"</code>
+      </div>
+      <div id="result1" class="result">点击按钮测试复制功能</div>
+    </div>
+
+    <!-- 2. 剪切功能 -->
+    <div class="card">
+      <h2>2. 剪切功能 (Cut)</h2>
+      <div class="row">
+        <textarea id="cutSource">这段文字会被剪切（内容会清空）</textarea>
+        <button class="btn-warning copy-btn" data-nc-target="#cutSource" data-nc-action="cut">剪切</button>
+      </div>
+      <div id="result2" class="result">点击剪切按钮，文本会被复制并清空</div>
+    </div>
+
+    <!-- 3. 静态方法 -->
+    <div class="card">
+      <h2>3. 静态方法 NowClipboard.copy()</h2>
+      <div class="row">
+        <input type="text" id="staticInput" placeholder="输入要复制的内容">
+        <button class="btn-success" id="staticCopyBtn">复制</button>
+      </div>
+      <div id="result3" class="result">使用静态方法直接复制文本</div>
+    </div>
+
+    <!-- 4. 读取剪贴板 -->
+    <div class="card">
+      <h2>4. 读取剪贴板 NowClipboard.read()</h2>
+      <div class="row">
+        <button class="btn-info" id="readBtn">读取剪贴板内容</button>
+      </div>
+      <div id="result4" class="result">点击按钮读取剪贴板（需要 HTTPS 和用户授权）</div>
+      <p class="note">注意：本地文件 (file://) 可能无法读取剪贴板，建议使用 HTTP 服务器</p>
+    </div>
+
+    <!-- 5. 粘贴监听 -->
+    <div class="card">
+      <h2>5. 粘贴监听 NowClipboard.onPaste()</h2>
+      <div class="paste-area" id="pasteArea" tabindex="0">
+        点击此处，然后按 Ctrl+V 粘贴
+      </div>
+      <div id="result5" class="result paste-result">粘贴内容将显示在这里</div>
+    </div>
+
+    <!-- 6. 权限检测 -->
+    <div class="card">
+      <h2>6. 权限检测 NowClipboard.queryPermission()</h2>
+      <div class="row">
+        <button class="btn-info" id="checkReadPermission">检测读取权限</button>
+        <span id="readPermissionStatus"></span>
+      </div>
+      <div class="row">
+        <button class="btn-info" id="checkWritePermission">检测写入权限</button>
+        <span id="writePermissionStatus"></span>
+      </div>
+      <div id="result6" class="result">点击按钮检测剪贴板权限状态</div>
+    </div>
+
+    <!-- 7. 动态文本 -->
+    <div class="card">
+      <h2>7. 动态文本 (使用 text 函数)</h2>
+      <div class="row">
+        <button class="btn-success" id="dynamicBtn">复制当前时间</button>
+      </div>
+      <div id="result7" class="result">每次点击复制的内容都不同</div>
+    </div>
+  </div>
+
+  <script src="NowClipboard.js"></script>
+  <script>
+    // 1. HTML 属性绑定
+    var clipboard = new NowClipboard('.copy-btn');
+    var result1 = document.getElementById('result1');
+    var result2 = document.getElementById('result2');
+
+    clipboard.on('success', function (e) {
+      var resultEl = e.action === 'cut' ? result2 : result1;
+      resultEl.textContent = (e.action === 'copy' ? '复制' : '剪切') + '成功: ' + e.text;
+      resultEl.className = 'result success';
+      e.clearSelection();
+    });
+
+    clipboard.on('error', function (e) {
+      var resultEl = e.action === 'cut' ? result2 : result1;
+      resultEl.textContent = '操作失败: ' + e.error.message;
+      resultEl.className = 'result error';
+    });
+
+    // 3. 静态方法
+    var staticCopyBtn = document.getElementById('staticCopyBtn');
+    var staticInput = document.getElementById('staticInput');
+    var result3 = document.getElementById('result3');
+
+    staticCopyBtn.addEventListener('click', function () {
+      var text = staticInput.value || '默认文本';
+      NowClipboard.copy(text).then(function (copied) {
+        result3.textContent = '复制成功: ' + copied;
+        result3.className = 'result success';
+      }).catch(function (err) {
+        result3.textContent = '复制失败: ' + err.message;
+        result3.className = 'result error';
+      });
+    });
+
+    // 4. 读取剪贴板
+    var readBtn = document.getElementById('readBtn');
+    var result4 = document.getElementById('result4');
+
+    readBtn.addEventListener('click', function () {
+      NowClipboard.read().then(function (text) {
+        result4.textContent = '剪贴板内容: ' + (text || '(空)');
+        result4.className = 'result success';
+      }).catch(function (err) {
+        result4.textContent = '读取失败: ' + err.message;
+        result4.className = 'result error';
+      });
+    });
+
+    // 5. 粘贴监听
+    var result5 = document.getElementById('result5');
+
+    NowClipboard.onPaste('#pasteArea', function (data) {
+      var parts = [];
+      if (data.text) parts.push('文本: ' + data.text);
+      if (data.html) parts.push('HTML: ' + data.html.substring(0, 100) + (data.html.length > 100 ? '...' : ''));
+      if (data.files && data.files.length) parts.push('文件: ' + data.files.length + ' 个');
+      result5.textContent = parts.join(' | ') || '(无内容)';
+      result5.className = 'result success';
+    });
+
+    // 6. 权限检测
+    var result6 = document.getElementById('result6');
+
+    function getPermissionClass(state) {
+      if (state === 'granted') return 'permission-status permission-granted';
+      if (state === 'denied') return 'permission-status permission-denied';
+      if (state === 'prompt') return 'permission-status permission-prompt';
+      return 'permission-status permission-unsupported';
+    }
+
+    document.getElementById('checkReadPermission').addEventListener('click', function () {
+      NowClipboard.queryPermission('read').then(function (res) {
+        var span = document.getElementById('readPermissionStatus');
+        span.textContent = res.state;
+        span.className = getPermissionClass(res.state);
+        result6.textContent = '读取权限: ' + res.state;
+        result6.className = 'result';
+      }).catch(function (err) {
+        result6.textContent = '查询失败: ' + err.message;
+        result6.className = 'result error';
+      });
+    });
+
+    document.getElementById('checkWritePermission').addEventListener('click', function () {
+      NowClipboard.queryPermission('write').then(function (res) {
+        var span = document.getElementById('writePermissionStatus');
+        span.textContent = res.state;
+        span.className = getPermissionClass(res.state);
+        result6.textContent = '写入权限: ' + res.state;
+        result6.className = 'result';
+      }).catch(function (err) {
+        result6.textContent = '查询失败: ' + err.message;
+        result6.className = 'result error';
+      });
+    });
+
+    // 7. 动态文本
+    var dynamicBtn = document.getElementById('dynamicBtn');
+    var result7 = document.getElementById('result7');
+
+    dynamicBtn.addEventListener('click', function () {
+      var now = new Date().toLocaleString('zh-CN');
+      NowClipboard.copy('当前时间: ' + now).then(function (text) {
+        result7.textContent = '复制成功: ' + text;
+        result7.className = 'result success';
+      }).catch(function (err) {
+        result7.textContent = '复制失败: ' + err.message;
+        result7.className = 'result error';
+      });
+    });
+  </script>
+</body>
+</html>
