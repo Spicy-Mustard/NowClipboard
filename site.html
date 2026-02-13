@@ -1,0 +1,804 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NowClipboard - 现代剪贴板工具库</title>
+<meta name="description" content="零依赖、支持浏览器和 Node.js 的现代剪贴板工具库。支持文本/图片/富文本复制、粘贴监听、自动重试。">
+<link rel="stylesheet" href="https://cdn.bootcdn.net/ajax/libs/remixicon/3.5.0/remixicon.css" type="text/css" />
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+:root {
+    --bg-dark: linear-gradient(to right, #000000, #1a1735, #0f0c29);
+    --bg-card: #1a1a2e;
+    --bg-code: #1e1e3f;
+    --gradient: linear-gradient(135deg, #e87900 0%, #dd3b00 100%);
+    --title-gradient: linear-gradient(135deg, #ff7c64 0%, #ff9d32 100%);
+    --accent: #dd8010;
+    --cyan: #b7b7b7;
+    --text: #f8fafc;
+    --text-muted: #768096;
+    --radius: 12px;
+}
+html{scroll-behavior:smooth}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,"PingFang SC","Microsoft YaHei",sans-serif;
+  background:var(--bg-dark);
+  color:var(--text);
+  line-height:1.6;
+  overflow-x:hidden;
+}
+a{color:var(--accent);text-decoration:none;transition:color .2s}
+a:hover{color:#c4b5fd}
+
+/* ── Nav ── */
+.nav{
+  position:fixed;top:0;left:0;right:0;z-index:100;
+  padding:16px 0;
+  background:rgba(15,15,26,.85);
+  backdrop-filter:blur(12px);
+  border-bottom:1px solid rgba(102,126,234,.15);
+  transition:padding .3s;
+}
+.nav.scrolled{padding:10px 0}
+.nav-inner{
+  max-width:1100px;margin:0 auto;padding:0 24px;
+  display:flex;align-items:center;justify-content:space-between;
+}
+.nav-logo{font-size:1.2rem;font-weight:700;background:var(--gradient);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;cursor:pointer}
+.nav-links{display:flex;gap:24px;list-style:none}
+.nav-links a{color:var(--text-muted);font-size:.9rem;transition:color .2s}
+.nav-links a:hover{color:var(--text)}
+
+/* ── Container ── */
+.container{max-width:1100px;margin:0 auto;padding:0 24px}
+
+/* ── Hero ── */
+.hero{
+  position:relative;
+  min-height:100vh;
+  display:flex;align-items:center;justify-content:center;
+  text-align:center;
+  overflow:hidden;
+}
+.hero::before{
+  content:'';position:absolute;top:-50%;left:-50%;
+  width:200%;height:200%;
+  background:radial-gradient(ellipse at 30% 50%,rgba(102,126,234,.15) 0%,transparent 50%),
+             radial-gradient(ellipse at 70% 50%,rgba(118,75,162,.15) 0%,transparent 50%);
+  animation:heroFloat 8s ease-in-out infinite alternate;
+}
+@keyframes heroFloat{
+  0%{transform:translate(0,0) rotate(0deg)}
+  100%{transform:translate(-2%,2%) rotate(2deg)}
+}
+.hero-content{position:relative;z-index:1;max-width:700px}
+.hero h1{
+  font-size:clamp(2.8rem,7vw,4.5rem);
+  font-weight:800;
+  letter-spacing:-.02em;
+  background:var(--title-gradient);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+  margin-bottom:16px;
+}
+.hero .tagline{
+  font-size:clamp(1rem,2.5vw,1.35rem);
+  color:var(--text-muted);
+  margin-bottom:40px;
+  line-height:1.7;
+}
+.install-box{
+  display:inline-flex;align-items:center;gap:12px;
+  background:var(--bg-code);
+  border:1px solid rgba(102,126,234,.3);
+  border-radius:50px;
+  padding:12px 16px 12px 28px;
+  font-family:"Fira Code","SFMono-Regular",Consolas,monospace;
+  font-size:.95rem;
+  margin-bottom:32px;
+  cursor:pointer;
+  transition:border-color .3s;
+}
+.install-box:hover{border-color:var(--accent)}
+.install-box code{color:var(--cyan)}
+.install-box .copy-icon{
+  display:flex;align-items:center;justify-content:center;
+  width:36px;height:36px;
+  background:var(--gradient);
+  border-radius:50%;
+  border:none;cursor:pointer;
+  color:#fff;font-size:1rem;
+  transition:transform .2s;
+}
+.install-box .copy-icon:hover{transform:scale(1.1)}
+.hero-btns{display:flex;gap:16px;justify-content:center;flex-wrap:wrap}
+.btn{
+  display:inline-flex;align-items:center;gap:8px;
+  padding:12px 28px;border-radius:50px;
+  font-size:.95rem;font-weight:600;
+  transition:transform .2s,box-shadow .2s;
+  border:none;cursor:pointer;
+}
+.btn:hover{transform:translateY(-2px)}
+.btn-primary{background:var(--gradient);color:#fff;box-shadow:0 4px 20px rgba(102,126,234,.35)}
+.btn-primary:hover{box-shadow:0 6px 30px rgba(102,126,234,.5);color:#fff}
+.btn-outline{background:transparent;color:var(--text);border:1.5px solid rgba(248,250,252,.25)}
+.btn-outline:hover{border-color:var(--accent);color:var(--accent)}
+
+/* ── Section ── */
+.section{padding:100px 0}
+.section-title{
+  font-size:clamp(1.6rem,4vw,2.2rem);
+  font-weight:700;
+  text-align:center;
+  margin-bottom:12px;
+}
+.section-subtitle{
+  text-align:center;
+  color:var(--text-muted);
+  margin-bottom:56px;
+  font-size:1.05rem;
+}
+
+/* ── Features Grid ── */
+.features{background:var(--bg-dark)}
+.feature-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(300px,1fr));
+  gap:24px;
+}
+.feature-card{
+  background:var(--bg-card);
+  border:1px solid rgba(102,126,234,.12);
+  border-radius:var(--radius);
+  padding:32px 28px;
+  transition:border-color .3s,transform .3s;
+}
+.feature-card:hover{border-color:rgba(102,126,234,.4);transform:translateY(-4px)}
+.feature-icon{
+  width:48px;height:48px;
+  border-radius:10px;
+  background:linear-gradient(135deg,rgba(102,126,234,.2),rgba(118,75,162,.2));
+  display:flex;align-items:center;justify-content:center;
+  font-size:1.4rem;
+  margin-bottom:16px;
+}
+.feature-card h3{font-size:1.1rem;margin-bottom:8px;font-weight:600}
+.feature-card p{color:var(--text-muted);font-size:.92rem;line-height:1.6}
+
+/* ── Demo Section ── */
+.demos{background:linear-gradient(180deg,var(--bg-dark) 0%,#12122a 100%)}
+.demo-grid{display:flex;flex-direction:column;gap:40px}
+.demo-block{
+  background:var(--bg-card);
+  border:1px solid rgba(102,126,234,.12);
+  border-radius:var(--radius);
+  overflow:hidden;
+}
+.demo-header{
+  padding:20px 28px;
+  border-bottom:1px solid rgba(102,126,234,.1);
+  font-weight:600;font-size:1rem;
+  display:flex;align-items:center;gap:10px;
+}
+.demo-header span{font-size:1.2rem}
+.demo-body{padding:28px;display:flex;flex-wrap:wrap;gap:16px;align-items:center}
+.demo-input{
+  flex:1;min-width:200px;
+  padding:12px 16px;
+  background:var(--bg-code);
+  border:1px solid rgba(102,126,234,.2);
+  border-radius:8px;
+  color:var(--text);
+  font-size:.95rem;
+  outline:none;
+  transition:border-color .3s;
+}
+.demo-input:focus{border-color:var(--accent)}
+.demo-btn{
+  padding:12px 24px;
+  background:var(--gradient);
+  color:#fff;
+  border:none;border-radius:8px;
+  font-size:.95rem;font-weight:600;
+  cursor:pointer;
+  transition:transform .2s,box-shadow .2s;
+  position:relative;
+  overflow:hidden;
+  min-width:120px;
+}
+.demo-btn:hover{transform:translateY(-2px);box-shadow:0 4px 16px rgba(102,126,234,.4)}
+.demo-btn.copied{background:linear-gradient(135deg,#059669,#10b981)}
+.demo-result{
+  width:100%;
+  padding:12px 16px;
+  margin-top:4px;
+  background:rgba(34,211,238,.08);
+  border:1px solid rgba(34,211,238,.2);
+  border-radius:8px;
+  color:var(--cyan);
+  font-family:monospace;
+  font-size:.88rem;
+  display:none;
+}
+.demo-result.show{display:block}
+.demo-rich-preview{
+  padding:16px;
+  background:var(--bg-code);
+  border-radius:8px;
+  border:1px solid rgba(102,126,234,.15);
+  min-width:200px;
+  flex:1;
+}
+.demo-rich-preview h4{color:var(--accent);margin-bottom:6px}
+.demo-rich-preview p{color:var(--text-muted);font-size:.9rem}
+.demo-rich-preview strong{color:var(--text)}
+.demo-rich-preview em{color:var(--cyan)}
+
+/* ── Install Section ── */
+.install{background:var(--bg-dark)}
+.install-tabs{
+  display:flex;justify-content:center;gap:8px;margin-bottom:32px;flex-wrap:wrap;
+}
+.tab-btn{
+  padding:10px 22px;
+  background:transparent;
+  border:1.5px solid rgba(248,250,252,.15);
+  border-radius:50px;
+  color:var(--text-muted);
+  font-size:.9rem;
+  cursor:pointer;
+  transition:all .3s;
+}
+.tab-btn:hover{border-color:var(--accent);color:var(--accent)}
+.tab-btn.active{background:var(--gradient);border-color:transparent;color:#fff}
+.tab-panel{display:none;max-width:700px;margin:0 auto}
+.tab-panel.active{display:block}
+.code-block{
+  background:var(--bg-code);
+  border:1px solid rgba(102,126,234,.15);
+  border-radius:var(--radius);
+  padding:24px 28px;
+  font-family:"Fira Code","SFMono-Regular",Consolas,monospace;
+  font-size:.9rem;
+  line-height:1.8;
+  color:#e2e8f0;
+  overflow-x:auto;
+  position:relative;
+}
+.code-block .kw{color:#c792ea}
+.code-block .str{color:#c3e88d}
+.code-block .fn{color:#82aaff}
+.code-block .cm{color:#636d83}
+.code-block .tag{color:#f07178}
+.code-block .attr{color:#c792ea}
+.code-block .val{color:#c3e88d}
+.code-copy{
+  position:absolute;top:12px;right:12px;
+  background:rgba(102,126,234,.2);
+  border:1px solid rgba(102,126,234,.3);
+  border-radius:6px;padding:6px 12px;
+  color:var(--text-muted);font-size:.8rem;
+  cursor:pointer;transition:all .3s;
+}
+.code-copy:hover{background:rgba(102,126,234,.4);color:var(--text)}
+.code-copy.copied{background:rgba(5,150,105,.3);border-color:rgba(16,185,129,.4);color:#6ee7b7}
+
+/* ── API Section ── */
+.api{background:linear-gradient(180deg,var(--bg-dark) 0%,#12122a 100%)}
+.api-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:24px}
+.api-card{
+  background:var(--bg-card);
+  border:1px solid rgba(102,126,234,.12);
+  border-radius:var(--radius);
+  padding:24px;
+  transition:border-color .3s;
+}
+.api-card:hover{border-color:rgba(102,126,234,.35)}
+.api-card h3{
+  font-size:1rem;font-weight:600;
+  margin-bottom:6px;
+  color:var(--accent);
+  font-family:monospace;
+}
+.api-card .api-desc{color:var(--text-muted);font-size:.88rem;margin-bottom:14px}
+.api-card pre{
+  background:var(--bg-code);
+  border-radius:8px;
+  padding:14px 16px;
+  font-size:.82rem;
+  line-height:1.7;
+  overflow-x:auto;
+  overflow-y:auto;
+  color:#e2e8f0;
+  height:168px;
+}
+
+/* ── Custom Scrollbar ── */
+.code-block::-webkit-scrollbar,
+.api-card pre::-webkit-scrollbar{height:6px}
+.code-block::-webkit-scrollbar-track,
+.api-card pre::-webkit-scrollbar-track{background:rgba(102,126,234,.08);border-radius:3px}
+.code-block::-webkit-scrollbar-thumb,
+.api-card pre::-webkit-scrollbar-thumb{background:rgba(102,126,234,.3);border-radius:3px}
+.code-block::-webkit-scrollbar-thumb:hover,
+.api-card pre::-webkit-scrollbar-thumb:hover{background:rgba(102,126,234,.5)}
+.code-block,.api-card pre{scrollbar-width:thin;scrollbar-color:rgba(102,126,234,.3) rgba(102,126,234,.08)}
+
+/* ── Footer ── */
+.footer{
+  padding:48px 0;
+  border-top:1px solid rgba(102,126,234,.1);
+  text-align:center;
+  color:var(--text-muted);
+  font-size:.9rem;
+}
+.footer-links{display:flex;justify-content:center;gap:24px;margin-bottom:16px;flex-wrap:wrap}
+.footer-links a{color:var(--text-muted);transition:color .2s}
+.footer-links a:hover{color:var(--accent)}
+.footer p{margin-top:8px;font-size:.85rem;color:rgba(148,163,184,.6)}
+
+/* ── Responsive ── */
+@media(max-width:768px){
+  .nav-links{display:none}
+  .hero{min-height:90vh;padding:80px 20px 40px}
+  .hero-content{padding:0 4px}
+  .install-box{flex-direction:row;font-size:.82rem;padding:10px 12px 10px 18px;max-width:100%}
+  .hero-btns{gap:10px}
+  .btn{padding:10px 20px;font-size:.88rem}
+  .container{padding:0 20px}
+  .section{padding:56px 0}
+  .section-title{font-size:1.4rem}
+  .section-subtitle{font-size:.92rem;margin-bottom:36px}
+  .feature-grid{grid-template-columns:1fr;gap:16px}
+  .feature-card{padding:24px 20px}
+  .api-grid{grid-template-columns:1fr;gap:16px}
+  .api-card{padding:20px 16px}
+  .api-card pre{font-size:.78rem;padding:12px 14px}
+  .demo-body{flex-direction:column;padding:20px}
+  .demo-header{padding:16px 20px}
+  .demo-btn{width:100%}
+  .code-block{padding:20px 16px;font-size:.82rem}
+  .install-tabs{gap:6px}
+  .tab-btn{padding:8px 16px;font-size:.84rem}
+}
+
+/* ── Back to Top ── */
+.back-top{
+  position:fixed;
+  right:24px;
+  bottom:24px;
+  width:44px;
+  height:44px;
+  background:var(--gradient);
+  border:none;
+  border-radius:50%;
+  color:#fff;
+  font-size:1.2rem;
+  cursor:pointer;
+  opacity:0;
+  visibility:hidden;
+  transform:translateY(20px);
+  transition:opacity .3s,visibility .3s,transform .3s,box-shadow .3s;
+  box-shadow:0 4px 16px rgba(102,126,234,.3);
+  z-index:99;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+.back-top:hover{box-shadow:0 6px 24px rgba(102,126,234,.5);transform:translateY(-2px)}
+.back-top.show{opacity:1;visibility:visible;transform:translateY(0)}
+@media(max-width:768px){.back-top{right:16px;bottom:16px;width:40px;height:40px;font-size:1.1rem}}
+
+/* ── Animations ── */
+.fade-in{opacity:0;transform:translateY(24px);transition:opacity .6s,transform .6s}
+.fade-in.visible{opacity:1;transform:translateY(0)}
+</style>
+</head>
+<body>
+
+<!-- Nav -->
+<nav class="nav" id="nav">
+  <div class="nav-inner">
+    <div class="nav-logo" onclick="window.scrollTo({top:0,behavior:'smooth'})">NowClipboard</div>
+    <ul class="nav-links">
+      <li><a href="#features">特性</a></li>
+      <li><a href="#demos">演示</a></li>
+      <li><a href="#install">安装</a></li>
+      <li><a href="#api">API</a></li>
+      <li><a href="https://github.com/Spicy-Mustard/NowClipboard" target="_blank">GitHub</a></li>
+    </ul>
+  </div>
+</nav>
+
+<!-- Hero -->
+<section class="hero">
+  <div class="hero-content">
+    <h1>NowClipboard</h1>
+    <p class="tagline">现代剪贴板工具库 — 零依赖，支持浏览器和 Node.js 双环境<br>文本 / 图片 / 富文本复制，粘贴监听，自动重试，开箱即用</p>
+    <div class="install-box" id="heroInstall" title="点击复制">
+      <code>npm install nowclipboard</code>
+      <button class="copy-icon" aria-label="复制"><i class="ri-file-copy-line"></i></button>
+    </div>
+    <br>
+    <div class="hero-btns">
+      <a href="https://github.com/Spicy-Mustard/NowClipboard" target="_blank" class="btn btn-primary">
+        <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        GitHub
+      </a>
+      <a href="https://www.npmjs.com/package/nowclipboard" target="_blank" class="btn btn-outline">
+        npm
+      </a>
+      <a href="https://spicy-mustard.github.io/NowClipboard/demo.html" target="_blank" class="btn btn-outline">在线预览</a>
+      <a href="#demos" class="btn btn-outline">交互演示 &darr;</a>
+    </div>
+  </div>
+</section>
+
+<!-- Features -->
+<section class="section features" id="features">
+  <div class="container">
+    <h2 class="section-title fade-in">为什么选择 NowClipboard？</h2>
+    <p class="section-subtitle fade-in">对比 ClipboardJS，功能全面升级</p>
+    <div class="feature-grid">
+      <div class="feature-card fade-in">
+        <div class="feature-icon"><i class="ri-flashlight-line"></i></div>
+        <h3>现代 API 优先</h3>
+        <p>优先使用 Clipboard API，自动降级到 execCommand。HTTPS 与 HTTP 环境均可工作，兼容 IE9+。</p>
+      </div>
+      <div class="feature-card fade-in">
+        <div class="feature-icon"><i class="ri-image-line"></i></div>
+        <h3>图片复制</h3>
+        <p>支持 Blob、File、Image、Canvas、URL 多种图片源复制到剪贴板。ClipboardJS 不支持此功能。</p>
+      </div>
+      <div class="feature-card fade-in">
+        <div class="feature-icon"><i class="ri-file-text-line"></i></div>
+        <h3>富文本复制</h3>
+        <p>同时复制 HTML + 纯文本，粘贴到 Word、邮件、富文本编辑器自动保留格式。</p>
+      </div>
+      <div class="feature-card fade-in">
+        <div class="feature-icon"><i class="ri-clipboard-line"></i></div>
+        <h3>粘贴事件监听</h3>
+        <p>通过 onPaste 监听粘贴事件，自动解析文本、HTML、文件三种类型，支持事件委托。</p>
+      </div>
+      <div class="feature-card fade-in">
+        <div class="feature-icon"><i class="ri-server-line"></i></div>
+        <h3>Node.js 支持</h3>
+        <p>浏览器 + Node.js 双环境运行。Node 端自动适配 clip (Win)、pbcopy (Mac)、xclip (Linux)。</p>
+      </div>
+      <div class="feature-card fade-in">
+        <div class="feature-icon"><i class="ri-code-s-slash-line"></i></div>
+        <h3>TypeScript & ESM</h3>
+        <p>完整的 .d.ts 类型定义，ESM 模块支持 tree-shaking。同时兼容 UMD / CommonJS / AMD。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Demos -->
+<section class="section demos" id="demos">
+  <div class="container">
+    <h2 class="section-title fade-in">在线体验</h2>
+    <p class="section-subtitle fade-in">点击按钮，直接试试效果</p>
+    <div class="demo-grid">
+
+      <!-- Demo 1: Text Copy -->
+      <div class="demo-block fade-in">
+        <div class="demo-header"><i class="ri-edit-line"></i> 文本复制</div>
+        <div class="demo-body">
+          <input class="demo-input" id="demoText" value="Hello NowClipboard! 你好，剪贴板！" readonly>
+          <button class="demo-btn" id="demoCopyBtn">复制文本</button>
+          <div class="demo-result" id="demoResult1"></div>
+        </div>
+      </div>
+
+      <!-- Demo 2: Dynamic Copy -->
+      <div class="demo-block fade-in">
+        <div class="demo-header"><i class="ri-time-line"></i> 动态内容复制</div>
+        <div class="demo-body">
+          <div class="demo-input" style="flex:1;cursor:default" id="dynamicContent">点击按钮复制当前时间</div>
+          <button class="demo-btn" id="demoDynamicBtn">复制当前时间</button>
+          <div class="demo-result" id="demoResult2"></div>
+        </div>
+      </div>
+
+      <!-- Demo 3: Rich Text Copy -->
+      <div class="demo-block fade-in">
+        <div class="demo-header"><i class="ri-article-line"></i> 富文本复制</div>
+        <div class="demo-body">
+          <div class="demo-rich-preview">
+            <h4>NowClipboard</h4>
+            <p><strong>零依赖</strong> 的现代剪贴板工具库，支持 <em>富文本</em> 复制。</p>
+          </div>
+          <button class="demo-btn" id="demoRichBtn">复制富文本</button>
+          <div class="demo-result" id="demoResult3"></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- Install -->
+<section class="section install" id="install">
+  <div class="container">
+    <h2 class="section-title fade-in">安装使用</h2>
+    <p class="section-subtitle fade-in">多种方式，随你选择</p>
+
+    <div class="install-tabs fade-in">
+      <button class="tab-btn active" data-tab="tab-npm">npm</button>
+      <button class="tab-btn" data-tab="tab-cdn">CDN</button>
+      <button class="tab-btn" data-tab="tab-esm">ESM</button>
+      <button class="tab-btn" data-tab="tab-html">HTML 属性</button>
+    </div>
+
+    <div class="tab-panel active fade-in" id="tab-npm">
+      <div class="code-block">
+        <button class="code-copy" data-code="npm install nowclipboard">复制</button>
+<span class="cm">// 安装</span>
+<span class="fn">npm install</span> nowclipboard
+
+<span class="cm">// CommonJS</span>
+<span class="kw">const</span> NowClipboard = <span class="fn">require</span>(<span class="str">'nowclipboard'</span>);
+
+<span class="cm">// 复制文本</span>
+NowClipboard.<span class="fn">copy</span>(<span class="str">'Hello World'</span>)
+  .<span class="fn">then</span>(<span class="kw">text</span> => console.<span class="fn">log</span>(<span class="str">'已复制:'</span>, text));
+      </div>
+    </div>
+
+    <div class="tab-panel" id="tab-cdn">
+      <div class="code-block">
+        <button class="code-copy" data-code='<script src="https://cdn.jsdelivr.net/npm/nowclipboard@1.1.1/NowClipboard.min.js"><\/script>'>复制</button>
+<span class="cm">&lt;!-- jsDelivr --&gt;</span>
+<span class="tag">&lt;script</span> <span class="attr">src</span>=<span class="val">"https://cdn.jsdelivr.net/npm/nowclipboard@1.1.1/NowClipboard.min.js"</span><span class="tag">&gt;&lt;/script&gt;</span>
+
+<span class="cm">&lt;!-- unpkg --&gt;</span>
+<span class="tag">&lt;script</span> <span class="attr">src</span>=<span class="val">"https://unpkg.com/nowclipboard@1.1.1/NowClipboard.min.js"</span><span class="tag">&gt;&lt;/script&gt;</span>
+
+<span class="cm">&lt;!-- 使用 --&gt;</span>
+<span class="tag">&lt;script&gt;</span>
+  NowClipboard.<span class="fn">copy</span>(<span class="str">'Hello!'</span>);
+<span class="tag">&lt;/script&gt;</span>
+      </div>
+    </div>
+
+    <div class="tab-panel" id="tab-esm">
+      <div class="code-block">
+        <button class="code-copy" data-code="import NowClipboard from 'nowclipboard';">复制</button>
+<span class="cm">// ESM 导入</span>
+<span class="kw">import</span> NowClipboard <span class="kw">from</span> <span class="str">'nowclipboard'</span>;
+
+<span class="cm">// 按需导入静态方法</span>
+<span class="kw">import</span> { copy, read, copyImage } <span class="kw">from</span> <span class="str">'nowclipboard'</span>;
+
+<span class="cm">// 复制图片</span>
+<span class="kw">await</span> <span class="fn">copyImage</span>(canvas);
+
+<span class="cm">// 读取剪贴板</span>
+<span class="kw">const</span> text = <span class="kw">await</span> <span class="fn">read</span>();
+      </div>
+    </div>
+
+    <div class="tab-panel" id="tab-html">
+      <div class="code-block">
+        <button class="code-copy" data-code='<button class="copy-btn" data-nc-target="#input">复制</button>'>复制</button>
+<span class="cm">&lt;!-- 声明式绑定，无需写 JS --&gt;</span>
+<span class="tag">&lt;input</span> <span class="attr">id</span>=<span class="val">"input"</span> <span class="attr">value</span>=<span class="val">"要复制的内容"</span><span class="tag">&gt;</span>
+<span class="tag">&lt;button</span> <span class="attr">class</span>=<span class="val">"copy-btn"</span> <span class="attr">data-nc-target</span>=<span class="val">"#input"</span><span class="tag">&gt;</span>复制<span class="tag">&lt;/button&gt;</span>
+
+<span class="tag">&lt;script&gt;</span>
+  <span class="kw">const</span> cb = <span class="kw">new</span> <span class="fn">NowClipboard</span>(<span class="str">'.copy-btn'</span>);
+  cb.<span class="fn">on</span>(<span class="str">'success'</span>, e => {
+    console.<span class="fn">log</span>(<span class="str">'复制成功:'</span>, e.text);
+  });
+<span class="tag">&lt;/script&gt;</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- API -->
+<section class="section api" id="api">
+  <div class="container">
+    <h2 class="section-title fade-in">API 速览</h2>
+    <p class="section-subtitle fade-in">简洁直观，覆盖所有剪贴板场景</p>
+    <div class="api-grid">
+
+      <div class="api-card fade-in">
+        <h3>NowClipboard.copy(text)</h3>
+        <div class="api-desc">复制文本到剪贴板，返回 Promise</div>
+        <pre><span class="kw">await</span> NowClipboard.<span class="fn">copy</span>(<span class="str">'Hello'</span>);
+<span class="cm">// 带重试配置</span>
+<span class="kw">await</span> NowClipboard.<span class="fn">copy</span>(<span class="str">'Hello'</span>, {
+  retries: <span class="val">3</span>,
+  timeout: <span class="val">5000</span>
+});</pre>
+      </div>
+
+      <div class="api-card fade-in">
+        <h3>NowClipboard.read()</h3>
+        <div class="api-desc">读取剪贴板文本内容 (需 HTTPS)</div>
+        <pre><span class="kw">const</span> text = <span class="kw">await</span> NowClipboard.<span class="fn">read</span>();
+console.<span class="fn">log</span>(<span class="str">'剪贴板内容:'</span>, text);</pre>
+      </div>
+
+      <div class="api-card fade-in">
+        <h3>NowClipboard.copyImage(source)</h3>
+        <div class="api-desc">复制图片，支持 Blob/Canvas/URL 等</div>
+        <pre><span class="cm">// 从 Canvas 复制</span>
+<span class="kw">await</span> NowClipboard.<span class="fn">copyImage</span>(canvas);
+<span class="cm">// 从 URL 复制</span>
+<span class="kw">await</span> NowClipboard.<span class="fn">copyImage</span>(<span class="str">'pic.png'</span>);</pre>
+      </div>
+
+      <div class="api-card fade-in">
+        <h3>NowClipboard.copyRich(opts)</h3>
+        <div class="api-desc">复制富文本 (HTML + 纯文本)</div>
+        <pre><span class="kw">await</span> NowClipboard.<span class="fn">copyRich</span>({
+  html: <span class="str">'&lt;b&gt;加粗&lt;/b&gt;'</span>,
+  text: <span class="str">'加粗'</span>
+});</pre>
+      </div>
+
+      <div class="api-card fade-in">
+        <h3>NowClipboard.onPaste(target, cb)</h3>
+        <div class="api-desc">监听粘贴事件，自动解析内容</div>
+        <pre>NowClipboard.<span class="fn">onPaste</span>(<span class="kw">null</span>, (data) => {
+  console.<span class="fn">log</span>(data.text);
+  console.<span class="fn">log</span>(data.html);
+  console.<span class="fn">log</span>(data.files);
+});</pre>
+      </div>
+
+      <div class="api-card fade-in">
+        <h3>new NowClipboard(trigger)</h3>
+        <div class="api-desc">实例化模式，事件委托 + HTML 属性绑定</div>
+        <pre><span class="kw">const</span> cb = <span class="kw">new</span> <span class="fn">NowClipboard</span>(<span class="str">'.btn'</span>);
+cb.<span class="fn">on</span>(<span class="str">'success'</span>, e => { ... });
+cb.<span class="fn">on</span>(<span class="str">'error'</span>, e => { ... });
+cb.<span class="fn">destroy</span>(); <span class="cm">// 释放资源</span></pre>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- Footer -->
+<footer class="footer">
+  <div class="container">
+    <div class="footer-links">
+      <a href="https://github.com/Spicy-Mustard/NowClipboard" target="_blank">GitHub</a>
+      <a href="https://www.npmjs.com/package/nowclipboard" target="_blank">npm</a>
+      <a href="https://cdn.jsdelivr.net/npm/nowclipboard@1.1.1/NowClipboard.min.js" target="_blank">jsDelivr CDN</a>
+      <a href="https://unpkg.com/nowclipboard@1.1.1/NowClipboard.min.js" target="_blank">unpkg CDN</a>
+    </div>
+    <p>MIT License &middot; Made by Spicy-Mustard</p>
+  </div>
+</footer>
+
+<!-- Back to Top -->
+<button class="back-top" id="backTop" aria-label="返回顶部"><i class="ri-arrow-up-line"></i></button>
+
+<!-- NowClipboard CDN -->
+<script src="https://cdn.jsdelivr.net/npm/nowclipboard@1.1.1/NowClipboard.min.js"></script>
+<script>
+(function(){
+  // ── Nav scroll effect & Back to top ──
+  var nav = document.getElementById('nav');
+  var backTop = document.getElementById('backTop');
+  window.addEventListener('scroll', function(){
+    nav.classList.toggle('scrolled', window.scrollY > 60);
+    backTop.classList.toggle('show', window.scrollY > 400);
+  });
+  backTop.addEventListener('click', function(){
+    window.scrollTo({top:0,behavior:'smooth'});
+  });
+
+  // ── Fade-in on scroll ──
+  var fades = document.querySelectorAll('.fade-in');
+  var observer = new IntersectionObserver(function(entries){
+    entries.forEach(function(e){
+      if(e.isIntersecting){ e.target.classList.add('visible'); }
+    });
+  }, { threshold: 0.1 });
+  fades.forEach(function(el){ observer.observe(el); });
+
+  // ── Helper: flash button ──
+  function flashBtn(btn, text, ms){
+    var orig = btn.textContent;
+    btn.textContent = text;
+    btn.classList.add('copied');
+    setTimeout(function(){
+      btn.textContent = orig;
+      btn.classList.remove('copied');
+    }, ms || 1500);
+  }
+
+  function showResult(el, msg){
+    el.textContent = msg;
+    el.classList.add('show');
+    setTimeout(function(){ el.classList.remove('show'); }, 3000);
+  }
+
+  // ── Hero install copy ──
+  document.getElementById('heroInstall').addEventListener('click', function(){
+    NowClipboard.copy('npm install nowclipboard').then(function(){
+      var icon = document.querySelector('.copy-icon');
+      icon.innerHTML = '<i class="ri-check-line"></i>';
+      setTimeout(function(){ icon.innerHTML = '<i class="ri-file-copy-line"></i>'; }, 1500);
+    });
+  });
+
+  // ── Demo 1: Text copy ──
+  document.getElementById('demoCopyBtn').addEventListener('click', function(){
+    var text = document.getElementById('demoText').value;
+    var btn = this;
+    var result = document.getElementById('demoResult1');
+    NowClipboard.copy(text).then(function(t){
+      flashBtn(btn, '已复制!');
+      showResult(result, '已复制到剪贴板: ' + t);
+    }).catch(function(err){
+      showResult(result, '复制失败: ' + err.message);
+    });
+  });
+
+  // ── Demo 2: Dynamic copy ──
+  document.getElementById('demoDynamicBtn').addEventListener('click', function(){
+    var now = new Date().toLocaleString('zh-CN');
+    document.getElementById('dynamicContent').textContent = now;
+    var btn = this;
+    var result = document.getElementById('demoResult2');
+    NowClipboard.copy(now).then(function(t){
+      flashBtn(btn, '已复制!');
+      showResult(result, '已复制当前时间: ' + t);
+    }).catch(function(err){
+      showResult(result, '复制失败: ' + err.message);
+    });
+  });
+
+  // ── Demo 3: Rich text copy ──
+  document.getElementById('demoRichBtn').addEventListener('click', function(){
+    var btn = this;
+    var result = document.getElementById('demoResult3');
+    NowClipboard.copyRich({
+      html: '<h3 style="color:#a78bfa">NowClipboard</h3><p><strong>零依赖</strong> 的现代剪贴板工具库，支持 <em>富文本</em> 复制。</p>',
+      text: 'NowClipboard - 零依赖的现代剪贴板工具库，支持富文本复制。'
+    }).then(function(){
+      flashBtn(btn, '已复制!');
+      showResult(result, '已复制富文本! 可粘贴到 Word / 邮件 / 富文本编辑器查看效果');
+    }).catch(function(err){
+      showResult(result, '复制失败: ' + err.message);
+    });
+  });
+
+  // ── Install tabs ──
+  var tabBtns = document.querySelectorAll('.tab-btn');
+  tabBtns.forEach(function(btn){
+    btn.addEventListener('click', function(){
+      tabBtns.forEach(function(b){ b.classList.remove('active'); });
+      document.querySelectorAll('.tab-panel').forEach(function(p){ p.classList.remove('active'); });
+      btn.classList.add('active');
+      document.getElementById(btn.getAttribute('data-tab')).classList.add('active');
+    });
+  });
+
+  // ── Code block copy buttons ──
+  document.querySelectorAll('.code-copy').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      var code = btn.getAttribute('data-code');
+      NowClipboard.copy(code).then(function(){
+        btn.textContent = '已复制!';
+        btn.classList.add('copied');
+        setTimeout(function(){
+          btn.textContent = '复制';
+          btn.classList.remove('copied');
+        }, 1500);
+      });
+    });
+  });
+
+})();
+</script>
+</body>
+</html>
