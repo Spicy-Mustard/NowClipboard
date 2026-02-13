@@ -42,8 +42,10 @@ npm install nowclipboard --save
 ### 浏览器引入
 
 ```html
+<!-- 开发环境 -->
 <script src="NowClipboard.js"></script>
 
+<!-- 生产环境（推荐） -->
 <script src="NowClipboard.min.js"></script>
 ```
 
