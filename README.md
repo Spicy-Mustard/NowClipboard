@@ -20,14 +20,19 @@
 
 | 文件 | 说明 |
 |------|------|
-| `NowClipboard.js` | 本库 |
+| `NowClipboard.js` | 完整版（带注释，便于阅读和调试） |
+| `NowClipboard.min.js` | 压缩版（生产环境推荐） |
 
 ## 快速开始
 
 ### 浏览器引入
 
 ```html
+<!-- 开发环境 -->
 <script src="NowClipboard.js"></script>
+
+<!-- 生产环境（推荐） -->
+<script src="NowClipboard.min.js"></script>
 ```
 
 ### Node.js 引入
