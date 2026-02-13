@@ -408,13 +408,54 @@ Each layer retries automatically on failure (default: up to 2 retries, exponenti
 
 ## Browser Compatibility
 
-| Browser | Method |
-|---------|--------|
-| Chrome 66+ | Clipboard API |
-| Firefox 63+ | Clipboard API |
-| Safari 13.1+ | Clipboard API |
-| Edge 79+ | Clipboard API |
-| IE 9+ / Legacy Chrome | execCommand fallback |
+NowClipboard prioritizes the modern [Clipboard API](https://developer.mozilla.org/en-US/docs/Web/API/Clipboard_API) and automatically falls back to [execCommand](https://developer.mozilla.org/en-US/docs/Web/API/Document/execCommand) for legacy browsers.
+
+<table>
+  <thead>
+    <tr>
+      <td align="center" width="120">
+        <img src="https://raw.githubusercontent.com/nicedoc/browser-logos/refs/heads/master/src/chrome/chrome_64x64.png" width="48"><br>
+        <b>Chrome</b>
+      </td>
+      <td align="center" width="120">
+        <img src="https://raw.githubusercontent.com/nicedoc/browser-logos/refs/heads/master/src/edge/edge_64x64.png" width="48"><br>
+        <b>Edge</b>
+      </td>
+      <td align="center" width="120">
+        <img src="https://raw.githubusercontent.com/nicedoc/browser-logos/refs/heads/master/src/firefox/firefox_64x64.png" width="48"><br>
+        <b>Firefox</b>
+      </td>
+      <td align="center" width="120">
+        <img src="https://raw.githubusercontent.com/nicedoc/browser-logos/refs/heads/master/src/safari/safari_64x64.png" width="48"><br>
+        <b>Safari</b>
+      </td>
+      <td align="center" width="120">
+        <img src="https://raw.githubusercontent.com/nicedoc/browser-logos/refs/heads/master/src/opera/opera_64x64.png" width="48"><br>
+        <b>Opera</b>
+      </td>
+      <td align="center" width="120">
+        <img src="https://raw.githubusercontent.com/nicedoc/browser-logos/refs/heads/master/src/archive/internet-explorer_9-11/internet-explorer_9-11_64x64.png" width="48"><br>
+        <b>IE</b>
+      </td>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td align="center">66+ ✅</td>
+      <td align="center">79+ ✅</td>
+      <td align="center">63+ ✅</td>
+      <td align="center">13.1+ ✅</td>
+      <td align="center">53+ ✅</td>
+      <td align="center">9+ ✅</td>
+    </tr>
+    <tr>
+      <td align="center" colspan="5"><sub>Clipboard API (modern)</sub></td>
+      <td align="center"><sub>execCommand (fallback)</sub></td>
+    </tr>
+  </tbody>
+</table>
+
+> 💡 For legacy browser support, NowClipboard automatically falls back to `execCommand`. Simply show a tooltip like `Copied!` on `success` or `Press Ctrl+C to copy` on `error`, since the text is already selected.
 
 ## Comparison with ClipboardJS
 

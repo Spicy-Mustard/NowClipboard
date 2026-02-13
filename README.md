@@ -408,13 +408,54 @@ clipboard.on('error', function (e) {
 
 ## 浏览器兼容性
 
-| 浏览器 | 方式 |
-|--------|------|
-| Chrome 66+ | Clipboard API |
-| Firefox 63+ | Clipboard API |
-| Safari 13.1+ | Clipboard API |
-| Edge 79+ | Clipboard API |
-| IE 9+ / 旧版 Chrome | execCommand 降级 |
+NowClipboard 优先使用现代 [Clipboard API](https://developer.mozilla.org/en-US/docs/Web/API/Clipboard_API)，并自动降级到 [execCommand](https://developer.mozilla.org/en-US/docs/Web/API/Document/execCommand) 以支持旧版浏览器。
+
+<table>
+  <thead>
+    <tr>
+      <td align="center" width="120">
+        <img src="https://raw.githubusercontent.com/nicedoc/browser-logos/refs/heads/master/src/chrome/chrome_64x64.png" width="48"><br>
+        <b>Chrome</b>
+      </td>
+      <td align="center" width="120">
+        <img src="https://raw.githubusercontent.com/nicedoc/browser-logos/refs/heads/master/src/edge/edge_64x64.png" width="48"><br>
+        <b>Edge</b>
+      </td>
+      <td align="center" width="120">
+        <img src="https://raw.githubusercontent.com/nicedoc/browser-logos/refs/heads/master/src/firefox/firefox_64x64.png" width="48"><br>
+        <b>Firefox</b>
+      </td>
+      <td align="center" width="120">
+        <img src="https://raw.githubusercontent.com/nicedoc/browser-logos/refs/heads/master/src/safari/safari_64x64.png" width="48"><br>
+        <b>Safari</b>
+      </td>
+      <td align="center" width="120">
+        <img src="https://raw.githubusercontent.com/nicedoc/browser-logos/refs/heads/master/src/opera/opera_64x64.png" width="48"><br>
+        <b>Opera</b>
+      </td>
+      <td align="center" width="120">
+        <img src="https://raw.githubusercontent.com/nicedoc/browser-logos/refs/heads/master/src/archive/internet-explorer_9-11/internet-explorer_9-11_64x64.png" width="48"><br>
+        <b>IE</b>
+      </td>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td align="center">66+ ✅</td>
+      <td align="center">79+ ✅</td>
+      <td align="center">63+ ✅</td>
+      <td align="center">13.1+ ✅</td>
+      <td align="center">53+ ✅</td>
+      <td align="center">9+ ✅</td>
+    </tr>
+    <tr>
+      <td align="center" colspan="5"><sub>Clipboard API（现代方案）</sub></td>
+      <td align="center"><sub>execCommand（降级）</sub></td>
+    </tr>
+  </tbody>
+</table>
+
+> 💡 如果需要支持旧版浏览器，NowClipboard 会自动降级到 `execCommand` 方案。你只需在 `error` 事件中提示用户手动 `Ctrl+C` 即可。
 
 ## 与 ClipboardJS 的区别
 

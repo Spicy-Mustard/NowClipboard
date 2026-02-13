@@ -1,6 +1,6 @@
 {
   "name": "nowclipboard",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "现代剪贴板工具库 - 零依赖，支持浏览器和 Node.js 双环境",
   "main": "NowClipboard.js",
   "module": "NowClipboard.esm.mjs",
