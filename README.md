@@ -14,6 +14,10 @@
 - **HTML 属性绑定** -- 通过 `data-nc-*` 属性声明式绑定复制行为
 - **事件委托** -- 支持选择器字符串、Element、NodeList 三种触发方式
 - **资源安全** -- 完善的 `destroy()` 方法防止内存泄漏
+- **图片复制** -- 支持 Blob、File、HTMLImageElement、HTMLCanvasElement、URL 等多种图片源
+- **富文本复制** -- 同时复制 HTML + 纯文本，自动降级到 execCommand
+- **TypeScript** -- 内置完整的 `.d.ts` 类型定义
+- **ESM 支持** -- 提供 ESM 模块版本，支持 `import` 语法和 Tree-shaking
 - **零依赖** -- 单文件，无任何外部依赖
 
 ## 文件说明
@@ -22,6 +26,8 @@
 |------|------|
 | `NowClipboard.js` | 完整版（带注释，便于阅读和调试） |
 | `NowClipboard.min.js` | 压缩版（生产环境推荐） |
+| `NowClipboard.esm.mjs` | ESM 模块版本（支持 `import` 语法） |
+| `NowClipboard.d.ts` | TypeScript 类型定义文件 |
 
 ## 安装
 
@@ -53,6 +59,16 @@ var NowClipboard = require('nowclipboard');
 require(['NowClipboard'], function (NowClipboard) {
   // ...
 });
+```
+
+### ESM 引入
+
+```js
+// 默认导入
+import NowClipboard from 'nowclipboard';
+
+// 命名导入（按需引入）
+import { copy, read, copyImage, copyRich } from 'nowclipboard';
 ```
 
 ## 使用方式
@@ -205,7 +221,56 @@ NowClipboard.queryPermission('write').then(function (result) {
 });
 ```
 
-### 8. Node.js 环境
+### 8. 复制图片
+
+需要 HTTPS + 现代浏览器（支持 ClipboardItem API）。
+
+```js
+// 复制图片 URL
+NowClipboard.copyImage('https://example.com/photo.png')
+  .then(function (blob) {
+    console.log('图片已复制，大小:', blob.size);
+  });
+
+// 复制 Canvas 画布
+var canvas = document.querySelector('#myCanvas');
+NowClipboard.copyImage(canvas);
+
+// 复制 img 元素
+var img = document.querySelector('#myImage');
+NowClipboard.copyImage(img);
+
+// 复制任意 Blob
+var blob = new Blob([data], { type: 'image/png' });
+NowClipboard.copyBlob(blob);
+```
+
+### 9. 复制富文本
+
+同时复制 HTML 和纯文本，粘贴时保留格式。
+
+```js
+NowClipboard.copyRich({
+  text: '纯文本内容',
+  html: '<b>加粗</b>的 <em>富文本</em> 内容'
+}).then(function (result) {
+  console.log('已复制:', result.text, result.html);
+});
+```
+
+通过 HTML 属性绑定富文本复制：
+
+```html
+<div id="rich-content">
+  <h3>标题</h3>
+  <p>这是 <strong>加粗</strong> 的内容</p>
+</div>
+<button class="btn" data-nc-target="#rich-content" data-nc-html="true">
+  复制富文本
+</button>
+```
+
+### 10. Node.js 环境
 
 ```js
 var NowClipboard = require('./NowClipboard.js');
@@ -266,6 +331,9 @@ new NowClipboard(trigger, [options])
 | `NowClipboard.copy(text, [options])` | `Promise<string>` | 复制文本到剪贴板 |
 | `NowClipboard.cut(element)` | `Promise<string>` | 剪切元素内容（仅浏览器） |
 | `NowClipboard.read([options])` | `Promise<string>` | 读取剪贴板文本 |
+| `NowClipboard.copyImage(source, [options])` | `Promise<Blob>` | 复制图片（支持 Blob/File/Img/Canvas/URL） |
+| `NowClipboard.copyBlob(blob, [mimeType], [options])` | `Promise<Blob>` | 复制任意 Blob 到剪贴板 |
+| `NowClipboard.copyRich(options)` | `Promise<{text, html}>` | 复制富文本（HTML + 纯文本） |
 | `NowClipboard.onPaste(target, callback)` | `{ destroy }` | 监听粘贴事件（仅浏览器） |
 | `NowClipboard.queryPermission(name)` | `Promise<{ state }>` | 查询剪贴板权限（`'read'`/`'write'`） |
 | `NowClipboard.checkSupport([actions])` | `boolean` | 检测环境是否支持剪贴板操作 |
@@ -305,6 +373,7 @@ clipboard.on('error', function (e) {
 | `data-nc-text` | 指定要复制的文本 | `data-nc-text="复制我"` |
 | `data-nc-target` | 指定目标元素的 CSS 选择器 | `data-nc-target="#input1"` |
 | `data-nc-action` | 操作类型：`copy`（默认）或 `cut` | `data-nc-action="cut"` |
+| `data-nc-html` | 启用富文本复制模式 | `data-nc-html="true"` |
 
 ## 降级策略
 
@@ -350,12 +419,16 @@ clipboard.on('error', function (e) {
 | 对比项 | ClipboardJS | NowClipboard.js |
 |--------|-------|-----------|
 | 复制方式 | 仅 `execCommand` | Clipboard API + execCommand 降级 |
+| 图片复制 | 不支持 | 支持（Blob/File/Img/Canvas/URL） |
+| 富文本复制 | 不支持 | 支持（HTML + 纯文本同时复制） |
 | 读取剪贴板 | 不支持 | 支持（浏览器 + Node.js） |
 | 粘贴监听 | 不支持 | 支持（onPaste + 自动解析） |
 | 权限检测 | 不支持 | 支持（queryPermission） |
 | 异步 | 同步 | Promise-based |
 | 重试 | 无 | 可配置重试 + 指数退避 + 超时 |
 | Node.js | 不支持 | 支持 (Win/Mac/Linux) |
+| TypeScript | 无类型定义 | 内置 `.d.ts` 类型定义 |
+| ESM | 不支持 | 支持（ESM + UMD 双格式） |
 | 代码 | 压缩混淆 | 可读、带注释 |
 | 销毁 | 基础 | 完善（防内存泄漏） |
 
