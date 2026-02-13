@@ -1,5 +1,7 @@
 # NowClipboard
 
+中文 | [English](./README.en.md)
+
 现代剪贴板工具库 -- 零依赖，支持浏览器和 Node.js 双环境。
 
 ## 特性
