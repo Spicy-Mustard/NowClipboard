@@ -23,6 +23,12 @@
 | `NowClipboard.js` | 完整版（带注释，便于阅读和调试） |
 | `NowClipboard.min.js` | 压缩版（生产环境推荐） |
 
+## 安装
+
+```bash
+npm install nowclipboard --save
+```
+
 ## 快速开始
 
 ### 浏览器引入
@@ -38,7 +44,7 @@
 ### Node.js 引入
 
 ```js
-var NowClipboard = require('./NowClipboard.js');
+var NowClipboard = require('nowclipboard');
 ```
 
 ### AMD 引入
