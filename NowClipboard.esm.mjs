@@ -1,18 +1,9 @@
 /**
- * NowClipboard
+ * NowClipboard (ESM)
  * 现代剪贴板工具库 - 基于 Clipboard API + execCommand 降级 + Node.js 适配
  * 零依赖，支持浏览器和 Node.js 环境
  */
-(function (root, factory) {
-  if (typeof module === 'object' && typeof module.exports === 'object') {
-    module.exports = factory();
-  } else if (typeof define === 'function' && define.amd) {
-    define([], factory);
-  } else {
-    root.NowClipboard = factory();
-  }
-})(typeof self !== 'undefined' ? self : this, function () {
-  'use strict';
+'use strict';
 
   // ========================================
   // 1. 工具函数 & 环境检测
@@ -1404,5 +1395,29 @@
     return copyRichText(options);
   };
 
-  return NowClipboard;
-});
+// ========================================
+// ESM 导出
+// ========================================
+
+var _copy = NowClipboard.copy;
+var _cut = NowClipboard.cut;
+var _read = NowClipboard.read;
+var _checkSupport = NowClipboard.checkSupport;
+var _queryPermission = NowClipboard.queryPermission;
+var _onPaste = NowClipboard.onPaste;
+var _copyImage = NowClipboard.copyImage;
+var _copyBlob = NowClipboard.copyBlob;
+var _copyRich = NowClipboard.copyRich;
+
+export default NowClipboard;
+export {
+  _copy as copy,
+  _cut as cut,
+  _read as read,
+  _checkSupport as checkSupport,
+  _queryPermission as queryPermission,
+  _onPaste as onPaste,
+  _copyImage as copyImage,
+  _copyBlob as copyBlob,
+  _copyRich as copyRich
+};

@@ -1,0 +1,42 @@
+{
+  "name": "nowclipboard",
+  "version": "1.1.0",
+  "description": "现代剪贴板工具库 - 零依赖，支持浏览器和 Node.js 双环境",
+  "main": "NowClipboard.js",
+  "module": "NowClipboard.esm.mjs",
+  "types": "NowClipboard.d.ts",
+  "exports": {
+    ".": {
+      "import": "./NowClipboard.esm.mjs",
+      "require": "./NowClipboard.js",
+      "types": "./NowClipboard.d.ts"
+    }
+  },
+  "files": [
+    "NowClipboard.js",
+    "NowClipboard.esm.mjs",
+    "NowClipboard.min.js",
+    "NowClipboard.d.ts"
+  ],
+  "keywords": [
+    "clipboard",
+    "copy",
+    "cut",
+    "paste",
+    "image",
+    "rich-text",
+    "esm",
+    "typescript",
+    "剪贴板"
+  ],
+  "author": "Spicy-Mustard",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Spicy-Mustard/NowClipboard.git"
+  },
+  "homepage": "https://github.com/Spicy-Mustard/NowClipboard",
+  "bugs": {
+    "url": "https://github.com/Spicy-Mustard/NowClipboard/issues"
+  }
+}
