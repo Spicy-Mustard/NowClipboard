@@ -189,6 +189,63 @@
         <div class="log empty" id="supportLog">点击按钮查看结果</div>
       </div>
 
+      <!-- write 别名 -->
+      <div class="card">
+        <h3><span class="icon">✏️</span>写入文本（write）</h3>
+        <div class="desc">使用 NowClipboard.write() 写入文本（copy 的语义别名，支持 Node.js）</div>
+        <input type="text" id="writeInput" value="write() 和 copy() 效果相同" placeholder="输入要写入的文本">
+        <div class="actions">
+          <button class="btn" onclick="demoWrite()">write 写入</button>
+          <button class="btn secondary" onclick="demoWriteSignal()">带 AbortSignal 写入</button>
+        </div>
+        <div class="log empty" id="writeLog">点击按钮查看结果</div>
+      </div>
+
+      <!-- writeImage 写入图片 -->
+      <div class="card">
+        <h3><span class="icon">🎨</span>写入图片（writeImage）</h3>
+        <div class="desc">使用 NowClipboard.writeImage() 写入图片到剪贴板（浏览器 + Node.js）</div>
+        <canvas id="writeImageCanvas" width="200" height="100" style="border:1px solid var(--border);border-radius:8px;display:block;margin-bottom:10px;"></canvas>
+        <div class="actions">
+          <button class="btn" onclick="demoWriteImage()">writeImage 写入</button>
+        </div>
+        <div class="log empty" id="writeImageLog">点击按钮查看结果</div>
+      </div>
+
+      <!-- writeFormats 多格式写入 -->
+      <div class="card">
+        <h3><span class="icon">📦</span>多格式写入（writeFormats）</h3>
+        <div class="desc">使用 NowClipboard.writeFormats() 一次写入多种 MIME 类型</div>
+        <div class="actions">
+          <button class="btn" onclick="demoWriteFormats()">写入 text + html</button>
+          <button class="btn secondary" onclick="demoWriteFormatsURI()">写入 data URI</button>
+        </div>
+        <div class="log empty" id="writeFormatsLog">点击按钮查看结果</div>
+      </div>
+
+      <!-- History 剪贴板历史 -->
+      <div class="card">
+        <h3><span class="icon">📜</span>剪贴板历史（History）</h3>
+        <div class="desc">使用 NowClipboard.History 自动记录剪贴板变更，支持搜索和持久化</div>
+        <div class="actions">
+          <button class="btn" id="historyBtn" onclick="demoHistory()">开始记录</button>
+          <button class="btn secondary" onclick="demoHistoryList()">查看历史</button>
+          <button class="btn secondary" onclick="demoHistorySearch()">搜索"Hello"</button>
+        </div>
+        <div class="log empty" id="historyLog">点击"开始记录"后，复制的内容会自动记录</div>
+      </div>
+
+      <!-- onSync 跨标签页同步 -->
+      <div class="card">
+        <h3><span class="icon">🔗</span>跨标签页同步（onSync）</h3>
+        <div class="desc">使用 NowClipboard.onSync() 基于 BroadcastChannel 在标签页间同步复制操作</div>
+        <div class="actions">
+          <button class="btn" id="syncBtn" onclick="demoSync()">开启同步</button>
+          <button class="btn secondary" onclick="demoSyncBroadcast()">手动广播</button>
+        </div>
+        <div class="log empty" id="syncLog">开启后，在其他标签页复制的操作会同步到此处</div>
+      </div>
+
       <!-- 使用提示 -->
       <div class="card" style="grid-column: 1 / -1;">
         <h3><span class="icon">💡</span>使用提示</h3>
@@ -405,6 +462,207 @@ function demoCheckSupport() {
   ];
   document.getElementById('supportLog').textContent = lines.join('\n');
   document.getElementById('supportLog').className = 'log info';
+}
+
+// ========== P0 功能演示 ==========
+
+var historyInstance = null;
+var syncInstance = null;
+
+// 初始化 writeImage 画布
+(function initWriteImageCanvas() {
+  var c = document.getElementById('writeImageCanvas');
+  if (!c) return;
+  var ctx = c.getContext('2d');
+  var grad = ctx.createLinearGradient(0, 0, 200, 100);
+  grad.addColorStop(0, '#ff6b35');
+  grad.addColorStop(1, '#9c27b0');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 200, 100);
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 14px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('writeImage()', 100, 45);
+  ctx.font = '12px sans-serif';
+  ctx.fillText('v1.1.7', 100, 68);
+})();
+
+// write 别名 — NowClipboard.write(text)
+async function demoWrite() {
+  var text = document.getElementById('writeInput').value;
+  try {
+    await NB.write(text);
+    log('writeLog', '\u2705 write() 写入成功："' + text + '"');
+  } catch (e) {
+    log('writeLog', '\u274c 写入失败：' + e.message, true);
+  }
+}
+
+// write 带 AbortSignal — NowClipboard.write(text, { signal })
+async function demoWriteSignal() {
+  var text = document.getElementById('writeInput').value;
+  var controller = new AbortController();
+  // 2 秒后自动中止
+  var timer = setTimeout(function() { controller.abort(); }, 2000);
+  try {
+    await NB.write(text, { signal: controller.signal });
+    clearTimeout(timer);
+    log('writeLog', '\u2705 write() 带信号写入成功："' + text + '"');
+  } catch (e) {
+    clearTimeout(timer);
+    if (e.name === 'AbortError') {
+      log('writeLog', '\u26a0\ufe0f 写入已被 AbortSignal 取消', true);
+    } else {
+      log('writeLog', '\u274c 写入失败：' + e.message, true);
+    }
+  }
+}
+
+// writeImage — NowClipboard.writeImage(source)
+async function demoWriteImage() {
+  var canvas = document.getElementById('writeImageCanvas');
+  try {
+    await NB.writeImage(canvas);
+    log('writeImageLog', '\u2705 writeImage() 图片已写入剪贴板');
+  } catch (e) {
+    log('writeImageLog', '\u274c 写入失败：' + e.message, true);
+  }
+}
+
+// writeFormats — NowClipboard.writeFormats(formats)
+async function demoWriteFormats() {
+  try {
+    await NB.writeFormats({
+      'text/plain': 'Hello from writeFormats!',
+      'text/html': '<b>Hello</b> from <i>writeFormats</i>!'
+    });
+    log('writeFormatsLog', '\u2705 writeFormats() 已写入 text/plain + text/html');
+  } catch (e) {
+    log('writeFormatsLog', '\u274c 写入失败：' + e.message, true);
+  }
+}
+
+// writeFormats data URI — NowClipboard.writeFormats(formats)
+async function demoWriteFormatsURI() {
+  try {
+    await NB.writeFormats({
+      'text/plain': 'Data URI demo',
+      'text/html': '<span style="color:#ff6b35">Data URI</span> demo'
+    });
+    log('writeFormatsLog', '\u2705 writeFormats() 已写入含 HTML 样式的多格式数据');
+  } catch (e) {
+    log('writeFormatsLog', '\u274c 写入失败：' + e.message, true);
+  }
+}
+
+// History — NowClipboard.History
+async function demoHistory() {
+  var btn = document.getElementById('historyBtn');
+  var logEl = document.getElementById('historyLog');
+  if (historyInstance) {
+    historyInstance.stop();
+    historyInstance = null;
+    btn.textContent = '开始记录';
+    logEl.className = 'log empty';
+    logEl.textContent = '历史记录已停止';
+    return;
+  }
+
+  // file:// 协议检测
+  if (location.protocol === 'file:') {
+    logEl.className = 'log error';
+    logEl.textContent = '\u26a0 file:// 协议下 History 不可用，请使用本地服务器';
+    return;
+  }
+
+  try {
+    await NB.read();
+  } catch (e) {
+    logEl.className = 'log error';
+    logEl.textContent = '\u274c 读取权限被拒绝，请先授权后再试';
+    return;
+  }
+
+  historyInstance = new NB.History({ interval: 1000 });
+  historyInstance.start();
+  btn.textContent = '停止记录';
+  logEl.className = 'log info';
+  logEl.textContent = '\u2705 正在记录剪贴板历史\u2026\n复制内容后会自动记录，点击"查看历史"查看';
+}
+
+function demoHistoryList() {
+  if (!historyInstance) {
+    log('historyLog', '\u26a0\ufe0f 请先点击"开始记录"', true);
+    return;
+  }
+  var items = historyInstance.list();
+  if (items.length === 0) {
+    log('historyLog', '\u26a0\ufe0f 暂无历史记录，请复制一些内容后再试');
+    return;
+  }
+  var lines = items.map(function(item, i) {
+    return (i + 1) + '. ' + (item.text || '(空)').substring(0, 50);
+  });
+  log('historyLog', '\u2705 共 ' + items.length + ' 条历史记录：\n' + lines.join('\n'));
+}
+
+function demoHistorySearch() {
+  if (!historyInstance) {
+    log('historyLog', '\u26a0\ufe0f 请先点击"开始记录"', true);
+    return;
+  }
+  var results = historyInstance.search('Hello');
+  if (results.length === 0) {
+    log('historyLog', '\u26a0\ufe0f 未找到包含"Hello"的记录');
+    return;
+  }
+  var lines = results.map(function(item, i) {
+    return (i + 1) + '. ' + (item.text || '(空)').substring(0, 50);
+  });
+  log('historyLog', '\u2705 找到 ' + results.length + ' 条包含"Hello"的记录：\n' + lines.join('\n'));
+}
+
+// onSync — NowClipboard.onSync()
+async function demoSync() {
+  var btn = document.getElementById('syncBtn');
+  var logEl = document.getElementById('syncLog');
+  if (syncInstance) {
+    syncInstance.destroy();
+    syncInstance = null;
+    btn.textContent = '开启同步';
+    logEl.className = 'log empty';
+    logEl.textContent = '跨标签页同步已关闭';
+    return;
+  }
+
+  if (typeof BroadcastChannel === 'undefined') {
+    logEl.className = 'log error';
+    logEl.textContent = '\u274c 当前浏览器不支持 BroadcastChannel';
+    return;
+  }
+
+  syncInstance = NB.onSync({
+    onCopy: function(data) {
+      logEl.textContent = '\u2705 收到其他标签页的复制操作！\n内容: ' + (data.text || '(空)');
+      logEl.className = 'log info';
+    }
+  });
+  btn.textContent = '关闭同步';
+  logEl.className = 'log info';
+  logEl.textContent = '\u2705 同步已开启\n在其他标签页复制内容，会实时同步到此处';
+}
+
+async function demoSyncBroadcast() {
+  if (!syncInstance) {
+    log('syncLog', '\u26a0\ufe0f 请先开启同步', true);
+    return;
+  }
+  try {
+    await NB.copy('\ud83d\udce1 广播测试 v1.1.7');
+    log('syncLog', '\u2705 已广播复制操作到其他标签页');
+  } catch (e) {
+    log('syncLog', '\u274c 广播失败：' + e.message, true);
+  }
 }
 </script>
 </body>
