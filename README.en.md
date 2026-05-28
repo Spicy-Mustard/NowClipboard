@@ -20,6 +20,10 @@ Modern clipboard utility library -- zero dependencies, supports both browser and
 - **Resource Safety** -- Comprehensive `destroy()` method prevents memory leaks; calling methods after destroy throws errors
 - **Image Copy** -- Supports Blob, File, HTMLImageElement, HTMLCanvasElement, URL, and data: URLs
 - **Rich Text Copy** -- Copy HTML + plain text simultaneously, auto-fallback to execCommand
+- **Node.js Write** -- `write()` / `writeImage()` write text and images to system clipboard in Node.js
+- **Multi-format Write** -- `writeFormats()` writes multiple MIME types in a single operation
+- **Clipboard History** -- `History` class auto-records clipboard changes, with search and persistence
+- **Cross-Tab Sync** -- `onSync()` auto-syncs clipboard operations via BroadcastChannel
 - **iOS Safari Compatible** -- Special fallback handling for mobile Safari
 - **data URL Optimization** -- data: URLs are decoded directly to Blob, no fetch network request needed
 - **TypeScript** -- Built-in complete `.d.ts` type definitions
@@ -75,7 +79,7 @@ require(['NowClipboard'], function (NowClipboard) {
 import NowClipboard from 'nowclipboard';
 
 // Named imports (tree-shakeable)
-import { copy, read, readRich, copyImage, copyRich, onChange } from 'nowclipboard';
+import { copy, read, readRich, copyImage, copyRich, onChange, write, writeImage, writeFormats, onSync, History } from 'nowclipboard';
 ```
 
 ## Usage
@@ -359,6 +363,147 @@ NowClipboard.read().then(function (text) {
 | Linux | `xclip` | `xclip -o` | Install: `sudo apt install xclip` |
 | Linux (fallback) | `xsel` | `xsel -o` | Alternative: `sudo apt install xsel` |
 
+### 13. Write Text (write)
+
+`write()` is an alias for `copy()`, available in both browser and Node.js. Semantically emphasizes the "write" operation.
+
+```js
+// Works in both browser and Node.js
+NowClipboard.write('Text to write to clipboard').then(function (text) {
+  console.log('Written:', text);
+});
+```
+
+### 14. Write Image (writeImage)
+
+Write images to system clipboard in both browser and Node.js.
+
+```js
+// Browser: same as copyImage
+NowClipboard.writeImage('https://example.com/photo.png')
+  .then(function (blob) { console.log('Image written:', blob.size); });
+
+// Browser: Canvas / img element
+NowClipboard.writeImage(document.querySelector('#myCanvas'));
+
+// Node.js: write from Buffer
+var fs = require('fs');
+var imgBuffer = fs.readFileSync('/path/to/image.png');
+NowClipboard.writeImage(imgBuffer).then(function () {
+  console.log('Image written to system clipboard');
+});
+
+// Node.js: write from file path
+NowClipboard.writeImage('/path/to/image.png').then(function () {
+  console.log('Image written');
+});
+```
+
+**Node.js writeImage system commands:**
+
+| OS | Command | Note |
+|----|---------|------|
+| Windows | PowerShell `Clipboard.SetImage()` | Passes image via Base64 |
+| macOS | `pbcopy` | Supports PNG format |
+| Linux | `xclip -t image/png` | Requires xclip |
+
+### 15. Multi-format Write (writeFormats)
+
+Write multiple MIME formats to clipboard in a single operation. Requires HTTPS + modern browser (ClipboardItem API).
+
+```js
+// Write both plain text and HTML
+NowClipboard.writeFormats({
+  'text/plain': 'Hello World',
+  'text/html': '<b>Hello</b> World'
+}).then(function (formats) {
+  console.log('Written formats:', Object.keys(formats));
+});
+
+// Write text + image
+NowClipboard.writeFormats({
+  'text/plain': 'Image description',
+  'image/png': imageBlob
+});
+
+// Custom MIME types
+NowClipboard.writeFormats({
+  'text/csv': 'name,age\nAlice,30',
+  'application/json': '{"name":"Alice","age":30}'
+});
+```
+
+### 16. Clipboard History
+
+Automatically records clipboard content changes with search and persistent storage.
+
+```js
+// Create a history instance
+var history = new NowClipboard.History({
+  maxSize: 50,           // Max entries (default 50)
+  storage: 'localStorage', // Storage: 'memory' | 'localStorage' | 'sessionStorage'
+  storageKey: 'my_history', // Storage key (default 'nowclipboard_history')
+  pollInterval: 1000     // Poll interval in ms (default 1000)
+});
+
+// Start monitoring
+history.start();
+
+// Get all history entries
+history.list(); // [{ text: '...', timestamp: 1234567890, type: 'text' }, ...]
+
+// Search history
+history.search('keyword'); // Returns matching entries
+
+// Get most recent entry
+history.latest(); // { text: '...', timestamp: ..., type: 'text' }
+
+// Current entry count
+history.size(); // 5
+
+// Clear history
+history.clear();
+
+// Stop monitoring (keeps history data)
+history.stop();
+
+// Destroy instance (clears history + stops monitoring)
+history.destroy();
+```
+
+> ⚠️ `History` uses `onChange` polling and is browser-only. `localStorage`/`sessionStorage` persistence requires HTTP/HTTPS access.
+
+### 17. Cross-Tab Sync (onSync)
+
+Auto-sync clipboard operations across tabs via [BroadcastChannel API](https://developer.mozilla.org/en-US/docs/Web/API/BroadcastChannel).
+
+```js
+// Start sync (auto-syncs copy/cut by default)
+var sync = NowClipboard.onSync({
+  channel: 'nowclipboard', // BroadcastChannel name (default 'nowclipboard')
+  autoSync: true           // Auto-sync copy/cut (default true)
+});
+
+// Listen for copy operations from other tabs
+sync.addListener(function (data) {
+  console.log('Other tab copied:', data.type, data.text);
+  // data.type: 'copy' | 'cut' | custom
+  // data.text: the copied text
+  // data.timestamp: timestamp
+});
+
+// Broadcast a custom message
+sync.broadcast({ type: 'custom', message: 'Hello from Tab A' });
+
+// Remove listener
+sync.removeListener(myCallback);
+
+// Destroy sync instance (restores original copy/cut methods)
+sync.destroy();
+```
+
+> ⚠️ `onSync` is browser-only and requires BroadcastChannel support (Chrome 54+, Firefox 38+, Safari 15.4+). Returns a no-op stub when unsupported.
+
 ## API Reference
 
 ### Constructor
@@ -393,16 +538,21 @@ new NowClipboard(trigger, [options])
 | Method | Returns | Description |
 |--------|---------|-------------|
 | `NowClipboard.copy(text, [options])` | `Promise<string>` | Copy text to clipboard |
+| `NowClipboard.write(text, [options])` | `Promise<string>` | Write text to clipboard (alias for copy) |
 | `NowClipboard.cut(element, [options])` | `Promise<string>` | Cut element content (browser only) |
 | `NowClipboard.read([options])` | `Promise<string>` | Read clipboard text |
 | `NowClipboard.readRich([options])` | `Promise<{text, html, images}>` | Read rich clipboard content (text+HTML+images, browser only) |
+| `NowClipboard.writeImage(source, [options])` | `Promise<Blob>` | Write image to clipboard (browser + Node.js) |
+| `NowClipboard.writeFormats(formats, [options])` | `Promise<FormatsMap>` | Write multiple MIME formats at once (browser only) |
 | `NowClipboard.copyImage(source, [options])` | `Promise<Blob>` | Copy image (Blob/File/Img/Canvas/URL/data: URL) |
 | `NowClipboard.copyBlob(blob, [mimeType], [options])` | `Promise<Blob>` | Copy any Blob to clipboard |
 | `NowClipboard.copyRich(options)` | `Promise<{text, html}>` | Copy rich text (HTML + plain text) |
 | `NowClipboard.onPaste(target, callback)` | `{ destroy }` | Listen to paste events (browser only) |
 | `NowClipboard.onChange(callback, [interval])` | `{ destroy }` | Listen to clipboard changes (browser only, polling) |
+| `NowClipboard.onSync([options])` | `SyncInstance` | Cross-tab sync (browser only, BroadcastChannel) |
 | `NowClipboard.queryPermission(name)` | `Promise<{ state }>` | Query clipboard permission (`'read'`/`'write'`) |
 | `NowClipboard.checkSupport([actions])` | `boolean` | Check if clipboard operations are supported |
+| `NowClipboard.History` | `ClipboardHistory` | Clipboard history class |
 
 ### RetryOptions
 
@@ -541,6 +691,10 @@ NowClipboard prioritizes the modern [Clipboard API](https://developer.mozilla.or
 | Rich Content Read | Not supported | Supported (readRich: text+HTML+images) |
 | Paste Listener | Not supported | Supported (onPaste + auto-parse) |
 | Change Listener | Not supported | Supported (onChange polling) |
+| Multi-format Write | Not supported | Supported (writeFormats multiple MIME types) |
+| Node.js Write Image | Not supported | Supported (writeImage Buffer/file path) |
+| Clipboard History | Not supported | Supported (History class + search + persistence) |
+| Cross-Tab Sync | Not supported | Supported (onSync BroadcastChannel) |
 | Permission Check | Not supported | Supported (queryPermission) |
 | Async | Synchronous | Promise-based |
 | Retry | None | Configurable retry + exponential backoff + timeout + AbortSignal |

@@ -1177,6 +1177,370 @@ var require_NowClipboard = __commonJS({
         }
         return copyRichText(options);
       };
+      NowClipboard2.write = function(text, options) {
+        if (!_isString(text)) {
+          return rejectedPromise(new TypeError("NowClipboard.write() expects a string argument"));
+        }
+        return copyText(text, options);
+      };
+      NowClipboard2.writeImage = function(source, options) {
+        if (_isBrowser) {
+          if (!isClipboardItemSupported()) {
+            return rejectedPromise(new Error("ClipboardItem API not supported. Requires HTTPS and a modern browser"));
+          }
+          return copyImage2(source, options);
+        }
+        if (_isNode) {
+          return nodeClipboardWriteImage(source, options);
+        }
+        return rejectedPromise(new Error("NowClipboard.writeImage() is not supported in this environment"));
+      };
+      function nodeClipboardWriteImage(source, options) {
+        return new Promise(function(resolve, reject) {
+          var platform = process.platform;
+          var imagePromise;
+          if (typeof Buffer !== "undefined" && source instanceof Buffer) {
+            imagePromise = resolvedPromise(source);
+          } else if (typeof Blob !== "undefined" && source instanceof Blob) {
+            imagePromise = source.arrayBuffer().then(function(ab) {
+              return Buffer.from(ab);
+            });
+          } else if (_isString(source)) {
+            try {
+              var fs = __require("fs");
+              imagePromise = new Promise(function(res, rej) {
+                fs.readFile(source, function(err, data) {
+                  if (err) rej(err);
+                  else res(data);
+                });
+              });
+            } catch (e) {
+              reject(new Error("Failed to read image file: " + e.message));
+              return;
+            }
+          } else {
+            reject(new TypeError("writeImage() expects Buffer, Blob, or file path string in Node.js"));
+            return;
+          }
+          imagePromise.then(function(buffer) {
+            var cmd, args, stdinData;
+            if (platform === "darwin") {
+              cmd = "pbcopy";
+              args = [];
+              stdinData = buffer;
+            } else if (platform === "linux") {
+              cmd = "xclip";
+              args = ["-selection", "clipboard", "-t", "image/png"];
+              stdinData = buffer;
+            } else if (platform === "win32") {
+              var psScript = [
+                "Add-Type -AssemblyName System.Windows.Forms",
+                "Add-Type -AssemblyName System.Drawing",
+                "$ms = New-Object System.IO.MemoryStream(,([Convert]::FromBase64String('" + buffer.toString("base64") + "')))",
+                "$img = [System.Drawing.Image]::FromStream($ms)",
+                "[System.Windows.Forms.Clipboard]::SetImage($img)",
+                "$img.Dispose()",
+                "$ms.Dispose()"
+              ].join(";");
+              cmd = "powershell";
+              args = [
+                "-NoProfile",
+                "-NonInteractive",
+                "-EncodedCommand",
+                Buffer.from(psScript, "utf16le").toString("base64")
+              ];
+              stdinData = null;
+            } else {
+              reject(new Error("writeImage() is not supported on platform: " + platform));
+              return;
+            }
+            try {
+              var spawn = __require("child_process").spawn;
+              var proc;
+              if (stdinData !== null) {
+                proc = spawn(cmd, args, { stdio: ["pipe", "ignore", "pipe"] });
+                proc.stdin.write(stdinData);
+                proc.stdin.end();
+              } else {
+                proc = spawn(cmd, args, { stdio: ["ignore", "ignore", "pipe"] });
+              }
+              var errOutput = "";
+              var finished = false;
+              if (proc.stderr) {
+                proc.stderr.on("data", function(chunk) {
+                  errOutput += chunk.toString("utf8");
+                });
+              }
+              proc.on("error", function(err) {
+                if (!finished) {
+                  finished = true;
+                  var fallbackMsg = platform === "linux" ? " Install xclip or xsel." : "";
+                  reject(new Error("writeImage() command failed: " + cmd + " - " + err.message + fallbackMsg));
+                }
+              });
+              proc.on("close", function(code) {
+                if (!finished) {
+                  finished = true;
+                  if (code === 0) {
+                    try {
+                      var resultBlob = new Blob([buffer], { type: "image/png" });
+                      resolve(resultBlob);
+                    } catch (e) {
+                      resolve(buffer);
+                    }
+                  } else {
+                    reject(new Error("writeImage() command exited with code: " + code + (errOutput ? " - " + errOutput.trim() : "")));
+                  }
+                }
+              });
+            } catch (e) {
+              reject(new Error("Failed to spawn writeImage process: " + e.message));
+            }
+          }).catch(function(err) {
+            reject(err);
+          });
+        });
+      }
+      NowClipboard2.writeFormats = function(formats, options) {
+        if (!_isBrowser) {
+          return rejectedPromise(new Error("NowClipboard.writeFormats() is only available in browser environment"));
+        }
+        if (!isClipboardItemSupported()) {
+          return rejectedPromise(new Error("ClipboardItem API not supported. Requires HTTPS and a modern browser"));
+        }
+        if (!formats || typeof formats !== "object") {
+          return rejectedPromise(new TypeError("NowClipboard.writeFormats() expects an object of MIME types"));
+        }
+        var keys = Object.keys(formats);
+        if (keys.length === 0) {
+          return rejectedPromise(new TypeError("NowClipboard.writeFormats() requires at least one MIME type"));
+        }
+        return retryOperation(function() {
+          var itemData = {};
+          for (var i = 0; i < keys.length; i++) {
+            var mime = keys[i];
+            var value = formats[mime];
+            if (value instanceof Blob) {
+              itemData[mime] = Promise.resolve(value);
+            } else {
+              itemData[mime] = Promise.resolve(new Blob([value], { type: mime }));
+            }
+          }
+          var item = new ClipboardItem(itemData);
+          return navigator.clipboard.write([item]).then(function() {
+            return formats;
+          });
+        }, options);
+      };
+      function ClipboardHistory(options) {
+        if (!(this instanceof ClipboardHistory)) {
+          return new ClipboardHistory(options);
+        }
+        var opts = options || {};
+        this._maxSize = opts.maxSize || 50;
+        this._storageType = opts.storage || "memory";
+        this._storageKey = opts.storageKey || "nowclipboard_history";
+        this._pollInterval = opts.pollInterval || 1e3;
+        this._entries = [];
+        this._watcher = null;
+        this._destroyed = false;
+        if (this._storageType === "localStorage" || this._storageType === "sessionStorage") {
+          this._loadFromStorage();
+        }
+      }
+      ClipboardHistory.prototype.start = function() {
+        if (this._destroyed) throw new Error("ClipboardHistory has been destroyed");
+        if (this._watcher) return this;
+        var self2 = this;
+        this._watcher = NowClipboard2.onChange(function(data) {
+          self2._addEntry(data.text);
+        }, this._pollInterval);
+        return this;
+      };
+      ClipboardHistory.prototype.stop = function() {
+        if (this._watcher) {
+          this._watcher.destroy();
+          this._watcher = null;
+        }
+        return this;
+      };
+      ClipboardHistory.prototype._addEntry = function(text) {
+        if (this._destroyed) return;
+        var entry = {
+          text,
+          timestamp: Date.now(),
+          type: "text"
+        };
+        this._entries.push(entry);
+        while (this._entries.length > this._maxSize) {
+          this._entries.shift();
+        }
+        this._saveToStorage();
+      };
+      ClipboardHistory.prototype.list = function() {
+        if (this._destroyed) throw new Error("ClipboardHistory has been destroyed");
+        return this._entries.slice();
+      };
+      ClipboardHistory.prototype.search = function(keyword) {
+        if (this._destroyed) throw new Error("ClipboardHistory has been destroyed");
+        if (!_isString(keyword)) {
+          throw new TypeError("search() expects a string keyword");
+        }
+        var lower = keyword.toLowerCase();
+        return this._entries.filter(function(entry) {
+          return entry.text.toLowerCase().indexOf(lower) !== -1;
+        });
+      };
+      ClipboardHistory.prototype.latest = function() {
+        if (this._destroyed) throw new Error("ClipboardHistory has been destroyed");
+        return this._entries.length > 0 ? this._entries[this._entries.length - 1] : null;
+      };
+      ClipboardHistory.prototype.clear = function() {
+        if (this._destroyed) throw new Error("ClipboardHistory has been destroyed");
+        this._entries = [];
+        this._saveToStorage();
+      };
+      ClipboardHistory.prototype.size = function() {
+        return this._entries.length;
+      };
+      ClipboardHistory.prototype._loadFromStorage = function() {
+        try {
+          var storage = this._storageType === "localStorage" ? localStorage : sessionStorage;
+          var data = storage.getItem(this._storageKey);
+          if (data) {
+            this._entries = JSON.parse(data);
+            while (this._entries.length > this._maxSize) {
+              this._entries.shift();
+            }
+          }
+        } catch (e) {
+          this._entries = [];
+        }
+      };
+      ClipboardHistory.prototype._saveToStorage = function() {
+        if (this._storageType === "memory") return;
+        try {
+          var storage = this._storageType === "localStorage" ? localStorage : sessionStorage;
+          storage.setItem(this._storageKey, JSON.stringify(this._entries));
+        } catch (e) {
+        }
+      };
+      ClipboardHistory.prototype.destroy = function() {
+        if (this._destroyed) return;
+        this._destroyed = true;
+        this.stop();
+        this._entries = [];
+      };
+      NowClipboard2.History = ClipboardHistory;
+      NowClipboard2.onSync = function(options) {
+        if (!_isBrowser) {
+          return {
+            destroy: function() {
+            },
+            broadcast: function() {
+            }
+          };
+        }
+        if (typeof BroadcastChannel === "undefined") {
+          return {
+            destroy: function() {
+            },
+            broadcast: function() {
+            }
+          };
+        }
+        var opts = options || {};
+        var channelName = opts.channel || "nowclipboard";
+        var autoSync = opts.autoSync !== false;
+        var bc = new BroadcastChannel(channelName);
+        var listeners = [];
+        var destroyed = false;
+        bc.onmessage = function(event) {
+          var data = event.data;
+          if (!data || !data.type) return;
+          for (var i = 0; i < listeners.length; i++) {
+            try {
+              listeners[i](data);
+            } catch (e) {
+              if (typeof console !== "undefined" && console.warn) {
+                console.warn("NowClipboard onSync callback error:", e);
+              }
+            }
+          }
+        };
+        var originalCopy = NowClipboard2.copy;
+        var originalCut = NowClipboard2.cut;
+        if (autoSync) {
+          NowClipboard2.copy = function(text, opts2) {
+            return originalCopy.call(NowClipboard2, text, opts2).then(function(result) {
+              if (!destroyed) {
+                try {
+                  bc.postMessage({ type: "copy", text: result, timestamp: Date.now() });
+                } catch (e) {
+                }
+              }
+              return result;
+            });
+          };
+          NowClipboard2.cut = function(element, opts2) {
+            return originalCut.call(NowClipboard2, element, opts2).then(function(result) {
+              if (!destroyed) {
+                try {
+                  bc.postMessage({ type: "cut", text: result, timestamp: Date.now() });
+                } catch (e) {
+                }
+              }
+              return result;
+            });
+          };
+        }
+        return {
+          /**
+           * Broadcast a custom message to other tabs
+           * @param {Object} data - Data to broadcast
+           */
+          broadcast: function(data) {
+            if (!destroyed) {
+              try {
+                bc.postMessage(data);
+              } catch (e) {
+              }
+            }
+          },
+          /**
+           * Add a listener for sync events
+           * @param {Function} callback - Callback function
+           */
+          addListener: function(callback) {
+            if (_isFunction(callback)) {
+              listeners.push(callback);
+            }
+          },
+          /**
+           * Remove a listener
+           * @param {Function} callback - Callback function to remove
+           */
+          removeListener: function(callback) {
+            var idx = listeners.indexOf(callback);
+            if (idx !== -1) {
+              listeners.splice(idx, 1);
+            }
+          },
+          /**
+           * Destroy the sync instance and restore original methods
+           */
+          destroy: function() {
+            if (destroyed) return;
+            destroyed = true;
+            if (autoSync) {
+              NowClipboard2.copy = originalCopy;
+              NowClipboard2.cut = originalCut;
+            }
+            bc.close();
+            listeners = [];
+          }
+        };
+      };
       return NowClipboard2;
     });
   }
@@ -1192,11 +1556,17 @@ var readRich = import_NowClipboard.default.readRich;
 var copyImage = import_NowClipboard.default.copyImage;
 var copyBlob = import_NowClipboard.default.copyBlob;
 var copyRich = import_NowClipboard.default.copyRich;
+var write = import_NowClipboard.default.write;
+var writeImage = import_NowClipboard.default.writeImage;
+var writeFormats = import_NowClipboard.default.writeFormats;
 var onPaste = import_NowClipboard.default.onPaste;
 var onChange = import_NowClipboard.default.onChange;
+var onSync = import_NowClipboard.default.onSync;
 var queryPermission = import_NowClipboard.default.queryPermission;
 var checkSupport = import_NowClipboard.default.checkSupport;
+var History = import_NowClipboard.default.History;
 export {
+  History,
   checkSupport,
   copy,
   copyBlob,
@@ -1206,8 +1576,12 @@ export {
   NowClipboard_esm_default as default,
   onChange,
   onPaste,
+  onSync,
   queryPermission,
   read,
-  readRich
+  readRich,
+  write,
+  writeFormats,
+  writeImage
 };
 //# sourceMappingURL=NowClipboard.esm.mjs.map

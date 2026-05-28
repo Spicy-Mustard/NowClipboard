@@ -20,6 +20,10 @@
 - **资源安全** -- 完善的 `destroy()` 方法防止内存泄漏，destroy 后调用方法会抛错
 - **图片复制** -- 支持 Blob、File、HTMLImageElement、HTMLCanvasElement、URL 等多种图片源
 - **富文本复制** -- 同时复制 HTML + 纯文本，自动降级到 execCommand
+- **Node.js 写入** -- `write()` / `writeImage()` 在 Node.js 中写入文本和图片到系统剪贴板
+- **多格式写入** -- `writeFormats()` 一次写入多种 MIME 类型
+- **剪贴板历史** -- `History` 类自动记录剪贴板变更，支持搜索和持久化
+- **跨标签页同步** -- `onSync()` 基于 BroadcastChannel 自动同步复制操作
 - **iOS Safari 适配** -- 针对移动端 Safari 的特殊降级处理
 - **data URL 优化** -- data: URL 直接解码为 Blob，不走 fetch 网络请求
 - **TypeScript** -- 内置完整的 `.d.ts` 类型定义
@@ -75,7 +79,7 @@ require(['NowClipboard'], function (NowClipboard) {
 import NowClipboard from 'nowclipboard';
 
 // 命名导入（按需引入）
-import { copy, read, readRich, copyImage, copyRich, onChange } from 'nowclipboard';
+import { copy, read, readRich, copyImage, copyRich, onChange, write, writeImage, writeFormats, onSync, History } from 'nowclipboard';
 ```
 
 ## 使用方式
@@ -359,6 +363,147 @@ NowClipboard.read().then(function (text) {
 | Linux | `xclip` | `xclip -o` | 需安装：`sudo apt install xclip` |
 | Linux (降级) | `xsel` | `xsel -o` | 备选：`sudo apt install xsel` |
 
+### 13. 写入文本（write）
+
+`write()` 是 `copy()` 的别名，在浏览器和 Node.js 中均可使用。语义上更强调"写入"操作。
+
+```js
+// 浏览器和 Node.js 通用
+NowClipboard.write('写入剪贴板的文本').then(function (text) {
+  console.log('已写入:', text);
+});
+```
+
+### 14. 写入图片（writeImage）
+
+在浏览器和 Node.js 中均可写入图片到系统剪贴板。
+
+```js
+// 浏览器：与 copyImage 相同
+NowClipboard.writeImage('https://example.com/photo.png')
+  .then(function (blob) { console.log('图片已写入:', blob.size); });
+
+// 浏览器：Canvas / img 元素
+NowClipboard.writeImage(document.querySelector('#myCanvas'));
+
+// Node.js：从 Buffer 写入
+var fs = require('fs');
+var imgBuffer = fs.readFileSync('/path/to/image.png');
+NowClipboard.writeImage(imgBuffer).then(function () {
+  console.log('图片已写入系统剪贴板');
+});
+
+// Node.js：从文件路径写入
+NowClipboard.writeImage('/path/to/image.png').then(function () {
+  console.log('图片已写入');
+});
+```
+
+**Node.js writeImage 系统命令：**
+
+| 操作系统 | 命令 | 备注 |
+|---------|------|------|
+| Windows | PowerShell `Clipboard.SetImage()` | 通过 Base64 传递图片数据 |
+| macOS | `pbcopy` | 支持 PNG 格式 |
+| Linux | `xclip -t image/png` | 需安装 xclip |
+
+### 15. 多格式写入（writeFormats）
+
+一次写入多种 MIME 格式到剪贴板。需要 HTTPS + 现代浏览器（支持 ClipboardItem API）。
+
+```js
+// 同时写入纯文本和 HTML
+NowClipboard.writeFormats({
+  'text/plain': 'Hello World',
+  'text/html': '<b>Hello</b> World'
+}).then(function (formats) {
+  console.log('已写入格式:', Object.keys(formats));
+});
+
+// 写入文本 + 图片
+NowClipboard.writeFormats({
+  'text/plain': '图片描述',
+  'image/png': imageBlob
+});
+
+// 自定义 MIME 类型
+NowClipboard.writeFormats({
+  'text/csv': 'name,age\nAlice,30',
+  'application/json': '{"name":"Alice","age":30}'
+});
+```
+
+### 16. 剪贴板历史（History）
+
+自动记录剪贴板内容变更，支持搜索和持久化存储。
+
+```js
+// 创建历史实例
+var history = new NowClipboard.History({
+  maxSize: 50,           // 最大条目数（默认 50）
+  storage: 'localStorage', // 存储方式：'memory' | 'localStorage' | 'sessionStorage'
+  storageKey: 'my_history', // 存储键名（默认 'nowclipboard_history'）
+  pollInterval: 1000     // 轮询间隔 ms（默认 1000）
+});
+
+// 开始监听
+history.start();
+
+// 获取所有历史
+history.list(); // [{ text: '...', timestamp: 1234567890, type: 'text' }, ...]
+
+// 搜索历史
+history.search('关键词'); // 返回匹配的条目
+
+// 获取最近一条
+history.latest(); // { text: '...', timestamp: ..., type: 'text' }
+
+// 当前条目数
+history.size(); // 5
+
+// 清空历史
+history.clear();
+
+// 停止监听（保留历史数据）
+history.stop();
+
+// 销毁实例（清空历史 + 停止监听）
+history.destroy();
+```
+
+> ⚠️ `History` 使用 `onChange` 轮询监听剪贴板，仅浏览器环境可用。`localStorage` / `sessionStorage` 持久化需要页面在 HTTP/HTTPS 下访问。
+
+### 17. 跨标签页同步（onSync）
+
+基于 [BroadcastChannel API](https://developer.mozilla.org/en-US/docs/Web/API/BroadcastChannel)，同一来源下的多个标签页自动同步剪贴板操作。
+
+```js
+// 启动同步（默认自动同步 copy/cut 操作）
+var sync = NowClipboard.onSync({
+  channel: 'nowclipboard', // BroadcastChannel 名称（默认 'nowclipboard'）
+  autoSync: true           // 自动同步 copy/cut（默认 true）
+});
+
+// 监听其他标签页的复制操作
+sync.addListener(function (data) {
+  console.log('其他标签页复制了:', data.type, data.text);
+  // data.type: 'copy' | 'cut' | 自定义
+  // data.text: 复制的文本
+  // data.timestamp: 时间戳
+});
+
+// 广播自定义消息
+sync.broadcast({ type: 'custom', message: 'Hello from Tab A' });
+
+// 移除监听
+sync.removeListener(myCallback);
+
+// 销毁同步实例（恢复原始 copy/cut 方法）
+sync.destroy();
+```
+
+> ⚠️ `onSync` 仅在浏览器环境且支持 BroadcastChannel 的浏览器中可用（Chrome 54+、Firefox 38+、Safari 15.4+）。不支持时会静默返回空操作对象。
+
 ## API 参考
 
 ### 构造函数
@@ -393,16 +538,21 @@ new NowClipboard(trigger, [options])
 | 方法 | 返回值 | 说明 |
 |------|--------|------|
 | `NowClipboard.copy(text, [options])` | `Promise<string>` | 复制文本到剪贴板 |
+| `NowClipboard.write(text, [options])` | `Promise<string>` | 写入文本到剪贴板（copy 的别名） |
 | `NowClipboard.cut(element, [options])` | `Promise<string>` | 剪切元素内容（仅浏览器） |
 | `NowClipboard.read([options])` | `Promise<string>` | 读取剪贴板文本 |
 | `NowClipboard.readRich([options])` | `Promise<{text, html, images}>` | 读取剪贴板富内容（文本+HTML+图片，仅浏览器） |
+| `NowClipboard.writeImage(source, [options])` | `Promise<Blob>` | 写入图片到剪贴板（浏览器 + Node.js） |
+| `NowClipboard.writeFormats(formats, [options])` | `Promise<FormatsMap>` | 一次写入多种 MIME 格式（仅浏览器） |
 | `NowClipboard.copyImage(source, [options])` | `Promise<Blob>` | 复制图片（支持 Blob/File/Img/Canvas/URL） |
 | `NowClipboard.copyBlob(blob, [mimeType], [options])` | `Promise<Blob>` | 复制任意 Blob 到剪贴板 |
 | `NowClipboard.copyRich(options)` | `Promise<{text, html}>` | 复制富文本（HTML + 纯文本） |
 | `NowClipboard.onPaste(target, callback)` | `{ destroy }` | 监听粘贴事件（仅浏览器） |
 | `NowClipboard.onChange(callback, [interval])` | `{ destroy }` | 监听剪贴板变更（仅浏览器，轮询方式） |
+| `NowClipboard.onSync([options])` | `SyncInstance` | 跨标签页同步（仅浏览器，BroadcastChannel） |
 | `NowClipboard.queryPermission(name)` | `Promise<{ state }>` | 查询剪贴板权限（`'read'`/`'write'`） |
 | `NowClipboard.checkSupport([actions])` | `boolean` | 检测环境是否支持剪贴板操作 |
+| `NowClipboard.History` | `ClipboardHistory` | 剪贴板历史类 |
 
 ### RetryOptions 配置
 
@@ -541,6 +691,10 @@ NowClipboard 优先使用现代 [Clipboard API](https://developer.mozilla.org/en
 | 富内容读取 | 不支持 | 支持（readRich：文本+HTML+图片） |
 | 粘贴监听 | 不支持 | 支持（onPaste + 自动解析） |
 | 变更监听 | 不支持 | 支持（onChange 轮询检测） |
+| 多格式写入 | 不支持 | 支持（writeFormats 一次写入多种 MIME） |
+| Node.js 写入图片 | 不支持 | 支持（writeImage Buffer/文件路径） |
+| 剪贴板历史 | 不支持 | 支持（History 类 + 搜索 + 持久化） |
+| 跨标签页同步 | 不支持 | 支持（onSync BroadcastChannel） |
 | 权限检测 | 不支持 | 支持（queryPermission） |
 | 异步 | 同步 | Promise-based |
 | 重试 | 无 | 可配置重试 + 指数退避 + 超时 + AbortSignal |

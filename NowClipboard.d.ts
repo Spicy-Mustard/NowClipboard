@@ -95,7 +95,69 @@ export interface ChangeData {
   text: string;
 }
 
+/** 剪贴板历史条目 */
+export interface HistoryEntry {
+  /** 文本内容 */
+  text: string;
+  /** 时间戳 */
+  timestamp: number;
+  /** 内容类型 */
+  type: string;
+}
+
+/** 剪贴板历史配置 */
+export interface HistoryOptions {
+  /** 最大历史条目数，默认 50 */
+  maxSize?: number;
+  /** 存储方式：'memory' | 'localStorage' | 'sessionStorage'，默认 'memory' */
+  storage?: 'memory' | 'localStorage' | 'sessionStorage';
+  /** 存储键名，默认 'nowclipboard_history' */
+  storageKey?: string;
+  /** 轮询间隔 ms，默认 1000 */
+  pollInterval?: number;
+}
+
+/** 跨标签同步事件数据 */
+export interface SyncData {
+  /** 事件类型：'copy' | 'cut' | 自定义 */
+  type: string;
+  /** 文本内容 */
+  text?: string;
+  /** 时间戳 */
+  timestamp?: number;
+  /** 自定义数据 */
+  [key: string]: any;
+}
+
+/** 跨标签同步配置 */
+export interface SyncOptions {
+  /** BroadcastChannel 名称，默认 'nowclipboard' */
+  channel?: string;
+  /** 是否自动同步 copy/cut 操作，默认 true */
+  autoSync?: boolean;
+}
+
+/** 跨标签同步实例 */
+export interface SyncInstance {
+  /** 广播自定义消息到其他标签页 */
+  broadcast: (data: any) => void;
+  /** 添加同步事件监听器 */
+  addListener: (callback: (data: SyncData) => void) => void;
+  /** 移除同步事件监听器 */
+  removeListener: (callback: (data: SyncData) => void) => void;
+  /** 销毁同步实例，恢复原始方法 */
+  destroy: () => void;
+}
+
+/** 多格式写入的 MIME 映射 */
+export interface FormatsMap {
+  [mimeType: string]: string | Blob;
+}
+
 export type ImageSource = Blob | File | HTMLImageElement | HTMLCanvasElement | string;
+
+/** Node.js 环境下的图片源类型 */
+export type NodeImageSource = Buffer | Blob | string;
 
 /** 事件映射 */
 type EventMap = {
@@ -105,6 +167,30 @@ type EventMap = {
 
 /** 事件处理函数类型 */
 type EventHandler<T> = (data: T) => void;
+
+/**
+ * 剪贴板历史类
+ * 自动记录剪贴板变更，支持搜索和持久化存储
+ */
+declare class ClipboardHistory {
+  constructor(options?: HistoryOptions);
+  /** 开始监听剪贴板变更 */
+  start(): this;
+  /** 停止监听剪贴板变更 */
+  stop(): this;
+  /** 获取所有历史条目 */
+  list(): HistoryEntry[];
+  /** 按关键词搜索历史 */
+  search(keyword: string): HistoryEntry[];
+  /** 获取最近一条记录 */
+  latest(): HistoryEntry | null;
+  /** 清空历史 */
+  clear(): void;
+  /** 当前历史条目数量 */
+  size(): number;
+  /** 销毁实例 */
+  destroy(): void;
+}
 
 /**
  * NowClipboard 主类
@@ -180,6 +266,32 @@ declare class NowClipboard {
   static readRich(options?: RetryOptions): Promise<ReadRichResult>;
 
   /**
+   * 写入文本到剪贴板（浏览器和 Node.js 均可用）
+   * @param text - 要写入的文本
+   * @param options - 重试配置
+   * @returns 写入的文本
+   */
+  static write(text: string, options?: RetryOptions & { container?: Element }): Promise<string>;
+
+  /**
+   * 写入图片到剪贴板（浏览器和 Node.js 均可用）
+   * 浏览器需要 HTTPS + 现代浏览器
+   * Node.js 支持 Buffer、Blob 或文件路径
+   * @param source - 图片源
+   * @param options - 重试配置
+   * @returns 写入的 Blob
+   */
+  static writeImage(source: ImageSource | NodeImageSource, options?: RetryOptions): Promise<Blob>;
+
+  /**
+   * 一次性写入多种 MIME 格式到剪贴板（仅浏览器）
+   * @param formats - MIME 类型到内容的映射，如 { 'text/plain': 'hello', 'text/html': '<b>hello</b>' }
+   * @param options - 重试配置
+   * @returns 写入的格式映射
+   */
+  static writeFormats(formats: FormatsMap, options?: RetryOptions): Promise<FormatsMap>;
+
+  /**
    * 检测环境是否支持剪贴板操作
    * @param actions - 要检测的操作（默认 ['copy', 'cut']）
    * @returns 是否支持
@@ -210,6 +322,13 @@ declare class NowClipboard {
   static onChange(callback: (data: ChangeData) => void, interval?: number): ChangeListener;
 
   /**
+   * 跨标签页同步（仅浏览器，基于 BroadcastChannel）
+   * @param options - 同步配置
+   * @returns 同步实例
+   */
+  static onSync(options?: SyncOptions): SyncInstance;
+
+  /**
    * 复制图片到剪贴板（仅浏览器，需要 HTTPS + 现代浏览器）
    * @param source - 图片源（Blob、File、HTMLImageElement、HTMLCanvasElement 或图片 URL）
    * @param options - 重试配置
@@ -232,6 +351,9 @@ declare class NowClipboard {
    * @returns 复制的富文本内容
    */
   static copyRich(options: RichTextOptions): Promise<{ text: string; html: string }>;
+
+  /** 剪贴板历史类 */
+  static History: typeof ClipboardHistory;
 }
 
 export default NowClipboard;

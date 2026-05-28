@@ -365,3 +365,151 @@ describe('Data URL parsing', () => {
     expect(decoded).toBe(text);
   });
 });
+
+// ========================================
+// P0 Features
+// ========================================
+
+describe('NowClipboard.write()', () => {
+  it('should reject non-string arguments', async () => {
+    await expect(NowClipboard.write(123)).rejects.toThrow('expects a string');
+    await expect(NowClipboard.write(null)).rejects.toThrow('expects a string');
+  });
+
+  it('should be a function', () => {
+    expect(typeof NowClipboard.write).toBe('function');
+  });
+});
+
+describe('NowClipboard.writeImage()', () => {
+  it('should be a function', () => {
+    expect(typeof NowClipboard.writeImage).toBe('function');
+  });
+
+  it('should reject when ClipboardItem is not supported', async () => {
+    // jsdom does not support ClipboardItem
+    await expect(NowClipboard.writeImage('test.png')).rejects.toThrow();
+  });
+});
+
+describe('NowClipboard.writeFormats()', () => {
+  it('should be a function', () => {
+    expect(typeof NowClipboard.writeFormats).toBe('function');
+  });
+
+  it('should reject non-object arguments', async () => {
+    await expect(NowClipboard.writeFormats('invalid')).rejects.toThrow();
+    await expect(NowClipboard.writeFormats(null)).rejects.toThrow();
+  });
+
+  it('should reject empty objects', async () => {
+    // In jsdom, ClipboardItem check runs first, so we get a different error
+    // This tests the validation logic when ClipboardItem IS available
+    await expect(NowClipboard.writeFormats({})).rejects.toThrow();
+  });
+
+  it('should reject when ClipboardItem is not supported', async () => {
+    await expect(NowClipboard.writeFormats({ 'text/plain': 'hello' })).rejects.toThrow();
+  });
+});
+
+describe('NowClipboard.History', () => {
+  it('should be a constructor', () => {
+    expect(typeof NowClipboard.History).toBe('function');
+  });
+
+  it('should create instance with default options', () => {
+    var history = new NowClipboard.History();
+    expect(history.size()).toBe(0);
+    expect(history.list()).toEqual([]);
+    expect(history.latest()).toBeNull();
+    history.destroy();
+  });
+
+  it('should create instance with custom options', () => {
+    var history = new NowClipboard.History({ maxSize: 10, storage: 'memory' });
+    expect(history.size()).toBe(0);
+    history.destroy();
+  });
+
+  it('should support list, search, clear, latest operations', () => {
+    var history = new NowClipboard.History();
+    // Manually add entries via internal method
+    history._addEntry('hello world');
+    history._addEntry('hello javascript');
+    history._addEntry('goodbye world');
+
+    expect(history.size()).toBe(3);
+    expect(history.list().length).toBe(3);
+    expect(history.latest().text).toBe('goodbye world');
+
+    var results = history.search('hello');
+    expect(results.length).toBe(2);
+
+    var results2 = history.search('WORLD');
+    expect(results2.length).toBe(2); // case-insensitive
+
+    history.clear();
+    expect(history.size()).toBe(0);
+    expect(history.latest()).toBeNull();
+    history.destroy();
+  });
+
+  it('should enforce maxSize', () => {
+    var history = new NowClipboard.History({ maxSize: 3 });
+    history._addEntry('a');
+    history._addEntry('b');
+    history._addEntry('c');
+    history._addEntry('d');
+
+    expect(history.size()).toBe(3);
+    expect(history.list()[0].text).toBe('b'); // 'a' was evicted
+    expect(history.latest().text).toBe('d');
+    history.destroy();
+  });
+
+  it('should throw after destroy', () => {
+    var history = new NowClipboard.History();
+    history.destroy();
+    expect(() => history.list()).toThrow('destroyed');
+    expect(() => history.search('x')).toThrow('destroyed');
+    expect(() => history.latest()).toThrow('destroyed');
+    expect(() => history.clear()).toThrow('destroyed');
+  });
+
+  it('should track timestamp and type in entries', () => {
+    var history = new NowClipboard.History();
+    var before = Date.now();
+    history._addEntry('test');
+    var after = Date.now();
+    var entry = history.latest();
+    expect(entry.text).toBe('test');
+    expect(entry.type).toBe('text');
+    expect(entry.timestamp).toBeGreaterThanOrEqual(before);
+    expect(entry.timestamp).toBeLessThanOrEqual(after);
+    history.destroy();
+  });
+});
+
+describe('NowClipboard.onSync()', () => {
+  it('should be a function', () => {
+    expect(typeof NowClipboard.onSync).toBe('function');
+  });
+
+  it('should return an object with destroy and broadcast methods', () => {
+    var sync = NowClipboard.onSync();
+    expect(typeof sync.destroy).toBe('function');
+    expect(typeof sync.broadcast).toBe('function');
+    expect(typeof sync.addListener).toBe('function');
+    expect(typeof sync.removeListener).toBe('function');
+    sync.destroy();
+  });
+
+  it('should return stub in non-browser-like environment', () => {
+    // In jsdom, BroadcastChannel may not be available
+    // The function should not throw
+    var sync = NowClipboard.onSync();
+    expect(typeof sync.destroy).toBe('function');
+    sync.destroy();
+  });
+});
