@@ -22,7 +22,8 @@
     "NowClipboard.d.ts",
     "README.md",
     "README.en.md",
-    "demo.html"
+    "demo.html",
+    "LICENSE"
   ],
   "keywords": [
     "clipboard",

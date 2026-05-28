@@ -583,7 +583,7 @@ async function demoHistory() {
     return;
   }
 
-  historyInstance = new NB.History({ interval: 1000 });
+  historyInstance = new NB.History({ pollInterval: 1000 });
   historyInstance.start();
   btn.textContent = '停止记录';
   logEl.className = 'log info';
@@ -641,11 +641,10 @@ async function demoSync() {
     return;
   }
 
-  syncInstance = NB.onSync({
-    onCopy: function(data) {
-      logEl.textContent = '\u2705 收到其他标签页的复制操作！\n内容: ' + (data.text || '(空)');
-      logEl.className = 'log info';
-    }
+  syncInstance = NB.onSync();
+  syncInstance.addListener(function(data) {
+    logEl.textContent = '\u2705 收到其他标签页的复制操作！\n类型: ' + (data.type || '(未知)') + '\n内容: ' + (data.text || '(空)');
+    logEl.className = 'log info';
   });
   btn.textContent = '关闭同步';
   logEl.className = 'log info';

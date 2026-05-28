@@ -358,3 +358,21 @@ declare class NowClipboard {
 
 export default NowClipboard;
 export { NowClipboard };
+
+// ESM 命名导出（对应 src/NowClipboard.esm.js）
+export var copy: typeof NowClipboard.copy;
+export var cut: typeof NowClipboard.cut;
+export var read: typeof NowClipboard.read;
+export var readRich: typeof NowClipboard.readRich;
+export var copyImage: typeof NowClipboard.copyImage;
+export var copyBlob: typeof NowClipboard.copyBlob;
+export var copyRich: typeof NowClipboard.copyRich;
+export var write: typeof NowClipboard.write;
+export var writeImage: typeof NowClipboard.writeImage;
+export var writeFormats: typeof NowClipboard.writeFormats;
+export var onPaste: typeof NowClipboard.onPaste;
+export var onChange: typeof NowClipboard.onChange;
+export var onSync: typeof NowClipboard.onSync;
+export var queryPermission: typeof NowClipboard.queryPermission;
+export var checkSupport: typeof NowClipboard.checkSupport;
+export var History: typeof ClipboardHistory;

@@ -1050,9 +1050,17 @@ var NowClipboard = (() => {
         NowClipboard.checkSupport = function(actions) {
           if (_isNode) return true;
           if (!_isBrowser) return false;
-          if (isClipboardAPIAvailable()) return true;
           var actionList = actions || ["copy", "cut"];
           if (_isString(actionList)) actionList = [actionList];
+          if (isClipboardAPIAvailable()) {
+            for (var i = 0; i < actionList.length; i++) {
+              var action = actionList[i];
+              if (action === "read") {
+                if (typeof navigator.clipboard.readText !== "function") return false;
+              }
+            }
+            return true;
+          }
           var supported = true;
           for (var i = 0; i < actionList.length; i++) {
             supported = supported && isExecCommandSupported(actionList[i]);

@@ -1506,13 +1506,24 @@
 
     if (!_isBrowser) return false;
 
-    // Modern Clipboard API available
-    if (isClipboardAPIAvailable()) return true;
-
-    // Check execCommand support
+    // Normalize actions parameter
     var actionList = actions || ['copy', 'cut'];
     if (_isString(actionList)) actionList = [actionList];
 
+    // Modern Clipboard API available — check specific capabilities
+    if (isClipboardAPIAvailable()) {
+      for (var i = 0; i < actionList.length; i++) {
+        var action = actionList[i];
+        if (action === 'read') {
+          // readText / read requires separate check
+          if (typeof navigator.clipboard.readText !== 'function') return false;
+        }
+        // copy, cut, and write are supported if writeText exists (checked by isClipboardAPIAvailable)
+      }
+      return true;
+    }
+
+    // Check execCommand support
     var supported = true;
     for (var i = 0; i < actionList.length; i++) {
       supported = supported && isExecCommandSupported(actionList[i]);
