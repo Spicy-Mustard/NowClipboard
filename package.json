@@ -21,7 +21,8 @@
     "NowClipboard.min.js.map",
     "NowClipboard.d.ts",
     "README.md",
-    "README.en.md"
+    "README.en.md",
+    "demo.html"
   ],
   "keywords": [
     "clipboard",

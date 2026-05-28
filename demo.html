@@ -108,7 +108,7 @@
     <header>
       <h1>NowClipboard</h1>
       <p>现代剪贴板工具库 — 交互演示</p>
-      <span class="badge">v1.1.6</span>
+      <span class="badge">v1.1.7</span>
     </header>
 
     <div class="status-bar">
@@ -222,7 +222,7 @@ var watcher = null;
   ctx.textAlign = 'center';
   ctx.fillText('NowClipboard', 100, 55);
   ctx.font = '13px sans-serif';
-  ctx.fillText('v1.1.6', 100, 78);
+  ctx.fillText('v1.1.7', 100, 78);
 })();
 
 // 检测环境
@@ -272,7 +272,7 @@ async function demoCopyRich() {
 
 // 复制 Emoji — NowClipboard.copy(text)
 async function demoCopyEmoji() {
-  var text = '\ud83d\ude80 NowClipboard v1.1.6 \ud83c\udf89 \ud83d\udc4b';
+  var text = '\ud83d\ude80 NowClipboard v1.1.7 \ud83c\udf89 \ud83d\udc4b';
   try {
     await NB.copy(text);
     log('copyLog', '\u2705 已复制 Emoji 文本：' + text);
