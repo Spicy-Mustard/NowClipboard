@@ -34,6 +34,7 @@ Modern clipboard utility library -- zero dependencies, supports both browser and
 | `NowClipboard.min.js` | Minified version (recommended for production) |
 | `NowClipboard.esm.mjs` | ESM module version (supports `import` syntax) |
 | `NowClipboard.d.ts` | TypeScript type definition file |
+| `demo.html` | Interactive demo page |
 
 ## Installation
 
@@ -551,6 +552,20 @@ NowClipboard prioritizes the modern [Clipboard API](https://developer.mozilla.or
 | Destroy | Basic | Comprehensive (prevents memory leaks + post-destroy protection) |
 
 ## Full Example
+
+### Interactive Demo
+
+The project includes an interactive demo page `demo.html` for trying out all features:
+
+```bash
+# Start a local server (recommended, Clipboard API requires HTTP/HTTPS)
+npx serve .
+# Then visit http://localhost:3000/demo.html
+```
+
+> ⚠️ Avoid opening via `file://` protocol directly. Browsers won't persist clipboard read permissions for local files, causing repeated permission prompts.
+
+### Code Example
 
 ```html
 <!DOCTYPE html>

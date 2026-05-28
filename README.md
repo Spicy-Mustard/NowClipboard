@@ -34,6 +34,7 @@
 | `NowClipboard.min.js` | 压缩版（生产环境推荐） |
 | `NowClipboard.esm.mjs` | ESM 模块版本（支持 `import` 语法） |
 | `NowClipboard.d.ts` | TypeScript 类型定义文件 |
+| `demo.html` | 交互式演示页面 |
 
 ## 安装
 
@@ -551,6 +552,20 @@ NowClipboard 优先使用现代 [Clipboard API](https://developer.mozilla.org/en
 | 销毁 | 基础 | 完善（防内存泄漏 + destroy 后保护） |
 
 ## 完整示例
+
+### 交互式演示
+
+项目包含一个交互式演示页面 `demo.html`，可在线体验所有功能：
+
+```bash
+# 启动本地服务器（推荐，剪贴板 API 需要 HTTP/HTTPS 环境）
+npx serve .
+# 然后访问 http://localhost:3000/demo.html
+```
+
+> ⚠️ 不推荐直接用 `file://` 协议打开，浏览器不会为本地文件持久化剪贴板读取权限，会导致反复弹出授权弹窗。
+
+### 代码示例
 
 ```html
 <!DOCTYPE html>
