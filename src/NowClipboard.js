@@ -1,5 +1,5 @@
 /**
- * NowClipboard v1.1.4
+ * NowClipboard v1.1.5
  * Modern clipboard utility library - Clipboard API + execCommand fallback + Node.js adapter
  * Zero dependencies, supports both browser and Node.js environments
  * 
@@ -42,6 +42,11 @@
   }
 
   /**
+   * Detect iOS Safari (for clipboard workaround)
+   */
+  var _isIOS = _isBrowser && /iPhone|iPad|iPod/.test(navigator.userAgent) && !window.MSStream;
+
+  /**
    * Check if modern Clipboard API is available
    */
   function isClipboardAPIAvailable() {
@@ -60,6 +65,16 @@
       navigator.clipboard != null &&
       typeof navigator.clipboard.write === 'function' &&
       typeof ClipboardItem === 'function';
+  }
+
+  /**
+   * Check if clipboard.read() is available (for rich read)
+   */
+  function isClipboardReadSupported() {
+    return _isBrowser &&
+      typeof navigator !== 'undefined' &&
+      navigator.clipboard != null &&
+      typeof navigator.clipboard.read === 'function';
   }
 
   /**
@@ -121,10 +136,7 @@
   EventEmitter.prototype.emit = function (event) {
     var events = this._events[event];
     if (!events || events.length === 0) return this;
-    var args = [];
-    for (var i = 1; i < arguments.length; i++) {
-      args.push(arguments[i]);
-    }
+    var args = Array.prototype.slice.call(arguments, 1);
     // Clone to prevent modification during callbacks
     var listeners = events.slice();
     var toRemove = [];
@@ -162,6 +174,7 @@
 
   /**
    * Select text in element and return its content
+   * Note: Does NOT modify the element's readonly attribute to avoid MutationObserver side effects
    */
   function selectText(element) {
     var text = '';
@@ -171,18 +184,12 @@
       element.focus();
       text = element.value;
     } else if (nodeName === 'INPUT' || nodeName === 'TEXTAREA') {
-      var isReadOnly = element.hasAttribute('readonly');
-      if (!isReadOnly) {
-        element.setAttribute('readonly', '');
-      }
-      element.select();
+      element.focus();
       try {
         element.setSelectionRange(0, element.value.length);
       } catch (e) {
-        // Some input types don't support setSelectionRange
-      }
-      if (!isReadOnly) {
-        element.removeAttribute('readonly');
+        // Some input types (e.g. number, email) don't support setSelectionRange
+        try { element.select(); } catch (e2) { /* ignore */ }
       }
       text = element.value;
     } else {
@@ -202,21 +209,32 @@
 
   /**
    * Create offscreen hidden textarea for fallback copy
+   * Uses iOS-compatible positioning to ensure execCommand works on mobile Safari
    */
   function createOffscreenArea(text) {
     var el = document.createElement('textarea');
-    el.style.fontSize = '12pt';
+    el.style.fontSize = '16px'; // Prevent iOS auto-zoom on inputs < 16px
     el.style.border = '0';
     el.style.padding = '0';
     el.style.margin = '0';
-    el.style.position = 'absolute';
-    el.style.opacity = '0';
 
-    var isRTL = document.documentElement.getAttribute('dir') === 'rtl';
-    el.style[isRTL ? 'right' : 'left'] = '-9999px';
-
-    var yPos = window.pageYOffset || document.documentElement.scrollTop;
-    el.style.top = yPos + 'px';
+    if (_isIOS) {
+      // iOS Safari requires elements to be in the visible viewport for execCommand('copy')
+      el.style.position = 'fixed';
+      el.style.left = '0';
+      el.style.top = '0';
+      el.style.width = '1px';
+      el.style.height = '1px';
+      el.style.opacity = '0.01';
+      el.style.zIndex = '99999';
+    } else {
+      el.style.position = 'absolute';
+      el.style.opacity = '0';
+      var isRTL = document.documentElement.getAttribute('dir') === 'rtl';
+      el.style[isRTL ? 'right' : 'left'] = '-9999px';
+      var yPos = window.pageYOffset || document.documentElement.scrollTop;
+      el.style.top = yPos + 'px';
+    }
 
     el.setAttribute('readonly', '');
     el.value = text;
@@ -303,8 +321,10 @@
 
   /**
    * Cut content from element
+   * @param {Element} element - Target element
+   * @param {Object} [options] - Retry options (retries/retryDelay/timeout/signal)
    */
-  function performCut(element) {
+  function performCut(element, options) {
     var text = selectText(element);
     var succeeded = false;
     try {
@@ -317,8 +337,8 @@
       return resolvedPromise(text);
     }
 
-    // Fallback: copy first, then clear manually
-    return copyText(text).then(function (copiedText) {
+    // Fallback: copy first, then clear manually (with retry support)
+    return copyText(text, options).then(function (copiedText) {
       // Clear editable element content
       var nodeName = element.nodeName;
       if (nodeName === 'INPUT' || nodeName === 'TEXTAREA') {
@@ -395,7 +415,7 @@
 
   /**
    * Unified read entry: auto-selects best method with retry support
-   * @param {Object} [options] - Options (retries/retryDelay/timeout)
+   * @param {Object} [options] - Options (retries/retryDelay/timeout/signal)
    * @returns {Promise<string>}
    */
   function readText(options) {
@@ -456,29 +476,58 @@
       if (!src) {
         return rejectedPromise(new Error('Image element has no src'));
       }
-      return fetch(src).then(function (response) {
-        if (!response.ok) {
-          throw new Error('Failed to fetch image: ' + response.status);
-        }
-        return response.blob();
-      }).catch(function (err) {
-        return rejectedPromise(new Error('Failed to fetch image (CORS?): ' + err.message));
-      });
+      return _fetchAsBlob(src);
     }
 
-    // URL string
+    // URL string (including data: URLs)
     if (_isString(source)) {
-      return fetch(source).then(function (response) {
-        if (!response.ok) {
-          throw new Error('Failed to fetch image: ' + response.status);
-        }
-        return response.blob();
-      }).catch(function (err) {
-        return rejectedPromise(new Error('Failed to fetch image URL (CORS?): ' + err.message));
-      });
+      return _fetchAsBlob(source);
     }
 
     return rejectedPromise(new TypeError('Unsupported image source type'));
+  }
+
+  /**
+   * Internal helper: fetch a URL as Blob
+   * Handles data: URLs efficiently without full fetch overhead
+   * @param {string} url
+   * @returns {Promise<Blob>}
+   */
+  function _fetchAsBlob(url) {
+    // Fast path for data: URLs - convert directly without fetch overhead
+    if (url.indexOf('data:') === 0) {
+      try {
+        var parts = url.split(',');
+        var mimeMatch = parts[0].match(/data:([^;]+)/);
+        var mime = mimeMatch ? mimeMatch[1] : 'image/png';
+        var isBase64 = parts[0].indexOf('base64') !== -1;
+        var data = parts.slice(1).join(',');
+        var bytes;
+        if (isBase64) {
+          var binary = atob(data);
+          bytes = new Uint8Array(binary.length);
+          for (var i = 0; i < binary.length; i++) {
+            bytes[i] = binary.charCodeAt(i);
+          }
+        } else {
+          bytes = new Uint8Array(decodeURIComponent(data).split('').map(function (c) {
+            return c.charCodeAt(0);
+          }));
+        }
+        return resolvedPromise(new Blob([bytes], { type: mime }));
+      } catch (e) {
+        return rejectedPromise(new Error('Failed to parse data URL: ' + e.message));
+      }
+    }
+
+    return fetch(url).then(function (response) {
+      if (!response.ok) {
+        throw new Error('Failed to fetch image: HTTP ' + response.status);
+      }
+      return response.blob();
+    }, function (err) {
+      throw new Error('Failed to fetch image (CORS or network error): ' + err.message);
+    });
   }
 
   /**
@@ -585,7 +634,7 @@
 
   /**
    * Unified rich text copy entry (with retry support)
-   * @param {Object} options - { text, html, container?, retries?, retryDelay?, timeout? }
+   * @param {Object} options - { text, html, container?, retries?, retryDelay?, timeout?, signal? }
    * @returns {Promise<{text: string, html: string}>}
    */
   function copyRichText(options) {
@@ -606,17 +655,23 @@
   /**
    * Parse retry config, merge with defaults
    * @param {Object|number} [options] - Config object or retry count
-   * @returns {{ retries: number, retryDelay: number, timeout: number }}
+   * @returns {{ retries: number, retryDelay: number, timeout: number, signal: AbortSignal|null }}
    */
   function parseRetryConfig(options) {
     if (typeof options === 'number') {
-      return { retries: options, retryDelay: 100, timeout: 0 };
+      return { retries: options, retryDelay: 100, timeout: 0, signal: null };
     }
     var opts = options || {};
+    var signal = opts.signal || null;
+    // Validate signal
+    if (signal && typeof signal.aborted === 'undefined') {
+      signal = null;
+    }
     return {
       retries: opts.retries != null ? opts.retries : 2,
       retryDelay: opts.retryDelay != null ? opts.retryDelay : 100,
-      timeout: opts.timeout != null ? opts.timeout : 0
+      timeout: opts.timeout != null ? opts.timeout : 0,
+      signal: signal
     };
   }
 
@@ -643,23 +698,46 @@
   }
 
   /**
-   * Retry mechanism (exponential backoff) with configurable retries, delay and timeout
+   * Retry mechanism (exponential backoff) with configurable retries, delay, timeout and AbortController support
    * @param {Function} fn - Function that returns a Promise
    * @param {Object|number} config - Config object or max retries (backward compatible)
    */
   function retryOperation(fn, config) {
     var cfg = parseRetryConfig(config);
     var attempt = 0;
+    var signal = cfg.signal;
+
+    // Check if already aborted before starting
+    if (signal && signal.aborted) {
+      return rejectedPromise(new DOMException('Operation aborted', 'AbortError'));
+    }
 
     function tryOnce() {
+      // Check abort before each attempt
+      if (signal && signal.aborted) {
+        return rejectedPromise(new DOMException('Operation aborted', 'AbortError'));
+      }
+
       return fn().catch(function (err) {
         attempt++;
         if (attempt > cfg.retries) {
           return rejectedPromise(err);
         }
+        // Check abort before retry delay
+        if (signal && signal.aborted) {
+          return rejectedPromise(new DOMException('Operation aborted', 'AbortError'));
+        }
         var delay = Math.pow(2, attempt - 1) * cfg.retryDelay;
-        return new Promise(function (resolve) {
-          setTimeout(resolve, delay);
+        return new Promise(function (resolve, reject) {
+          var timer = setTimeout(resolve, delay);
+          // Listen for abort during delay
+          if (signal) {
+            var onAbort = function () {
+              clearTimeout(timer);
+              reject(new DOMException('Operation aborted', 'AbortError'));
+            };
+            signal.addEventListener('abort', onAbort, { once: true });
+          }
         }).then(tryOnce);
       });
     }
@@ -684,9 +762,13 @@
       var cmd, args;
 
       if (platform === 'win32') {
-        // Use PowerShell for Unicode/Chinese support
+        // Use PowerShell EncodedCommand to avoid stdin encoding issues with Unicode/Chinese text.
+        // Base64-encode the text and pass it directly, bypassing stdin entirely.
+        var psScript = 'Set-Clipboard -Value ([System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String(\'' +
+          Buffer.from(text, 'utf8').toString('base64') + '\')))';
         cmd = 'powershell';
-        args = ['-command', 'Set-Clipboard'];
+        args = ['-NoProfile', '-NonInteractive', '-EncodedCommand',
+          Buffer.from(psScript, 'utf16le').toString('base64')];
       } else if (platform === 'darwin') {
         cmd = 'pbcopy';
         args = [];
@@ -724,8 +806,14 @@
           }
         });
 
-        proc.stdin.write(text);
-        proc.stdin.end();
+        // For non-Windows, write text via stdin
+        if (platform !== 'win32') {
+          proc.stdin.write(text);
+          proc.stdin.end();
+        } else {
+          // Windows: close stdin immediately (text is passed via EncodedCommand)
+          proc.stdin.end();
+        }
       } catch (e) {
         reject(new Error('Failed to spawn clipboard process: ' + e.message));
       }
@@ -782,8 +870,11 @@
       var cmd, args;
 
       if (platform === 'win32') {
+        // Use EncodedCommand with explicit UTF-8 output encoding
+        var psScript = '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Get-Clipboard';
         cmd = 'powershell';
-        args = ['-command', 'Get-Clipboard'];
+        args = ['-NoProfile', '-NonInteractive', '-EncodedCommand',
+          Buffer.from(psScript, 'utf16le').toString('base64')];
       } else if (platform === 'darwin') {
         cmd = 'pbpaste';
         args = [];
@@ -795,12 +886,17 @@
 
       try {
         var spawn = require('child_process').spawn;
-        var proc = spawn(cmd, args, { stdio: ['ignore', 'pipe', 'ignore'] });
+        var proc = spawn(cmd, args, { stdio: ['ignore', 'pipe', 'pipe'] });
         var output = '';
+        var errOutput = '';
         var finished = false;
 
         proc.stdout.on('data', function (chunk) {
-          output += chunk.toString();
+          output += chunk.toString('utf8');
+        });
+
+        proc.stderr.on('data', function (chunk) {
+          errOutput += chunk.toString('utf8');
         });
 
         proc.on('error', function (err) {
@@ -819,10 +915,11 @@
           if (!finished) {
             finished = true;
             if (code === 0) {
-              // Windows PowerShell output may have trailing newline
-              resolve(platform === 'win32' ? output.replace(/\r?\n$/, '') : output);
+              // Trim trailing newline
+              resolve(output.replace(/\r?\n$/, ''));
             } else {
-              reject(new Error('Clipboard read command exited with code: ' + code));
+              reject(new Error('Clipboard read command exited with code: ' + code +
+                (errOutput ? ' - ' + errOutput.trim() : '')));
             }
           }
         });
@@ -964,6 +1061,7 @@
 
   /**
    * Bind event listener - supports selector string, Element, NodeList
+   * Note: Throws synchronously for invalid arguments (programming error, not runtime error)
    */
   function bindListener(target, eventType, handler) {
     if (_isString(target)) {
@@ -1081,6 +1179,7 @@
    * @param {Function} [options.target] - Function to get target element
    * @param {Function|string} [options.text] - Function or string to get copy text
    * @param {Element} [options.container] - Container element (defaults to document.body)
+   * @param {AbortSignal} [options.signal] - AbortSignal to cancel operations
    */
   function NowClipboard(trigger, options) {
     if (!(this instanceof NowClipboard)) {
@@ -1103,6 +1202,15 @@
   NowClipboard.prototype.constructor = NowClipboard;
 
   /**
+   * Check if instance has been destroyed, throw if so
+   */
+  NowClipboard.prototype._checkDestroyed = function () {
+    if (this._destroyed) {
+      throw new Error('NowClipboard instance has been destroyed. Create a new instance.');
+    }
+  };
+
+  /**
    * Resolve options
    */
   NowClipboard.prototype.resolveOptions = function (opts) {
@@ -1113,6 +1221,7 @@
     this.retries = opts.retries != null ? opts.retries : 2;
     this.retryDelay = opts.retryDelay != null ? opts.retryDelay : 100;
     this.timeout = opts.timeout != null ? opts.timeout : 0;
+    this.signal = opts.signal || null;
   };
 
   /**
@@ -1129,6 +1238,8 @@
    * Click event handler
    */
   NowClipboard.prototype.onClick = function (e) {
+    this._checkDestroyed();
+
     var trigger = e.delegateTarget || e.currentTarget;
     var actionName = this.action(trigger) || 'copy';
     var targetEl = this.target(trigger);
@@ -1152,9 +1263,12 @@
     // Check if rich text copy mode (data-nc-html="true")
     var isRichCopy = getAttr('html', trigger) === 'true';
 
+    // Build retry options with instance-level signal
+    var retryOpts = { container: self.container, retries: self.retries, retryDelay: self.retryDelay, timeout: self.timeout, signal: self.signal };
+
     if (text) {
       // Text specified, copy directly
-      operationPromise = copyText(text, { container: self.container, retries: self.retries, retryDelay: self.retryDelay, timeout: self.timeout });
+      operationPromise = copyText(text, retryOpts);
     } else if (targetEl) {
       if (actionName === 'cut') {
         // Validate element for cut operation
@@ -1167,7 +1281,7 @@
           });
           return;
         }
-        operationPromise = performCut(targetEl);
+        operationPromise = performCut(targetEl, retryOpts);
       } else if (isRichCopy) {
         // Rich text copy: copy HTML and plain text simultaneously
         var richHtml = targetEl.innerHTML;
@@ -1178,13 +1292,14 @@
           container: self.container,
           retries: self.retries,
           retryDelay: self.retryDelay,
-          timeout: self.timeout
+          timeout: self.timeout,
+          signal: self.signal
         }).then(function (result) {
           return result.text;
         });
       } else {
         // Copy is allowed from disabled elements (only cut is restricted)
-        operationPromise = copyFromElement(targetEl, { container: self.container, retries: self.retries, retryDelay: self.retryDelay, timeout: self.timeout });
+        operationPromise = copyFromElement(targetEl, retryOpts);
       }
     } else {
       self.emit('error', {
@@ -1211,6 +1326,27 @@
         clearSelection: clearSelection
       });
     });
+  };
+
+  /**
+   * Override EventEmitter methods to check destroyed state
+   */
+  var _originalOn = NowClipboard.prototype.on;
+  NowClipboard.prototype.on = function () {
+    this._checkDestroyed();
+    return _originalOn.apply(this, arguments);
+  };
+
+  var _originalOnce = NowClipboard.prototype.once;
+  NowClipboard.prototype.once = function () {
+    this._checkDestroyed();
+    return _originalOnce.apply(this, arguments);
+  };
+
+  var _originalOff = NowClipboard.prototype.off;
+  NowClipboard.prototype.off = function () {
+    this._checkDestroyed();
+    return _originalOff.apply(this, arguments);
   };
 
   /**
@@ -1255,6 +1391,7 @@
     this.target = null;
     this.text = null;
     this.container = null;
+    this.signal = null;
   };
 
   // ========================================
@@ -1264,7 +1401,7 @@
   /**
    * Static copy method - copy text directly
    * @param {string} text - Text to copy
-   * @param {Object} [options] - Options
+   * @param {Object} [options] - Options (retries/retryDelay/timeout/signal/container)
    * @returns {Promise<string>}
    */
   NowClipboard.copy = function (text, options) {
@@ -1277,25 +1414,77 @@
   /**
    * Static cut method - cut element content
    * @param {Element} element - Target element
+   * @param {Object} [options] - Retry options (retries/retryDelay/timeout/signal)
    * @returns {Promise<string>}
    */
-  NowClipboard.cut = function (element) {
+  NowClipboard.cut = function (element, options) {
     if (!_isBrowser) {
       return rejectedPromise(new Error('NowClipboard.cut() is only available in browser environment'));
     }
     if (!_isElement(element)) {
       return rejectedPromise(new TypeError('NowClipboard.cut() expects an HTMLElement argument'));
     }
-    return performCut(element);
+    return performCut(element, options);
   };
 
   /**
    * Static read method - read clipboard text
-   * @param {Object} [options] - Options (retries/retryDelay/timeout)
+   * @param {Object} [options] - Options (retries/retryDelay/timeout/signal)
    * @returns {Promise<string>}
    */
   NowClipboard.read = function (options) {
     return readText(options);
+  };
+
+  /**
+   * Static readRich method - read clipboard with rich content (text, html, images)
+   * Requires HTTPS + modern browser with ClipboardItem API
+   * @param {Object} [options] - Options (retries/retryDelay/timeout/signal)
+   * @returns {Promise<{text: string, html: string, images: Blob[]}>}
+   */
+  NowClipboard.readRich = function (options) {
+    if (!_isBrowser) {
+      return rejectedPromise(new Error('NowClipboard.readRich() is only available in browser environment'));
+    }
+    if (!isClipboardReadSupported()) {
+      return rejectedPromise(new Error('clipboard.read() API not supported. Requires HTTPS and a modern browser'));
+    }
+
+    return retryOperation(function () {
+      return navigator.clipboard.read().then(function (clipItems) {
+        var result = { text: '', html: '', images: [] };
+        var promises = [];
+
+        for (var i = 0; i < clipItems.length; i++) {
+          var item = clipItems[i];
+          for (var j = 0; j < item.types.length; j++) {
+            (function (type) {
+              if (type === 'text/plain') {
+                promises.push(item.getType(type).then(function (blob) {
+                  return blob.text();
+                }).then(function (text) {
+                  result.text = text;
+                }));
+              } else if (type === 'text/html') {
+                promises.push(item.getType(type).then(function (blob) {
+                  return blob.text();
+                }).then(function (html) {
+                  result.html = html;
+                }));
+              } else if (type.indexOf('image/') === 0) {
+                promises.push(item.getType(type).then(function (blob) {
+                  result.images.push(blob);
+                }));
+              }
+            })(item.types[j]);
+          }
+        }
+
+        return Promise.all(promises).then(function () {
+          return result;
+        });
+      });
+    }, options);
   };
 
   /**
@@ -1345,15 +1534,73 @@
    */
   NowClipboard.onPaste = function (target, callback) {
     if (!_isBrowser) {
-      throw new Error('NowClipboard.onPaste() is only available in browser environment');
+      return rejectedPromise(new Error('NowClipboard.onPaste() is only available in browser environment'));
     }
     return bindPasteListener(target, callback);
   };
 
   /**
+   * Static onChange listener - polls clipboard for changes
+   * @param {Function} callback - Callback, receives { text: string }
+   * @param {number} [interval=1000] - Polling interval in ms
+   * @returns {{ destroy: Function }}
+   */
+  NowClipboard.onChange = function (callback, interval) {
+    if (!_isBrowser) {
+      return rejectedPromise(new Error('NowClipboard.onChange() is only available in browser environment'));
+    }
+    if (!_isFunction(callback)) {
+      throw new TypeError('NowClipboard.onChange() expects a callback function');
+    }
+
+    var pollInterval = interval || 1000;
+    var lastText = null;
+    var timer = null;
+    var destroyed = false;
+    var initialized = false;
+
+    function poll() {
+      if (destroyed) return;
+      readText().then(function (text) {
+        if (destroyed) return;
+        if (!initialized) {
+          // First read: initialize without triggering callback
+          lastText = text;
+          initialized = true;
+        } else if (text !== lastText) {
+          lastText = text;
+          try {
+            callback({ text: text });
+          } catch (e) {
+            // Don't let callback errors break the polling loop
+          }
+        }
+      }).catch(function () {
+        // Silently ignore read errors (e.g. page not focused, permission denied)
+      });
+    }
+
+    // Initial read
+    poll();
+
+    // Start polling
+    timer = setInterval(poll, pollInterval);
+
+    return {
+      destroy: function () {
+        destroyed = true;
+        if (timer !== null) {
+          clearInterval(timer);
+          timer = null;
+        }
+      }
+    };
+  };
+
+  /**
    * Copy image to clipboard (browser only, requires HTTPS + modern browser)
    * @param {Blob|File|HTMLImageElement|HTMLCanvasElement|string} source - Image source
-   * @param {Object} [options] - Retry options
+   * @param {Object} [options] - Retry options (retries/retryDelay/timeout/signal)
    * @returns {Promise<Blob>}
    */
   NowClipboard.copyImage = function (source, options) {
@@ -1370,7 +1617,7 @@
    * Copy any Blob to clipboard (browser only)
    * @param {Blob} blob - Blob data
    * @param {string} [mimeType] - MIME type, defaults to blob.type
-   * @param {Object} [options] - Retry options
+   * @param {Object} [options] - Retry options (retries/retryDelay/timeout/signal)
    * @returns {Promise<Blob>}
    */
   NowClipboard.copyBlob = function (blob, mimeType, options) {
@@ -1391,7 +1638,7 @@
 
   /**
    * Copy rich text (HTML + plain text) to clipboard (browser only)
-   * @param {Object} options - { text: string, html: string, container?, retries?, retryDelay?, timeout? }
+   * @param {Object} options - { text: string, html: string, container?, retries?, retryDelay?, timeout?, signal? }
    * @returns {Promise<{text: string, html: string}>}
    */
   NowClipboard.copyRich = function (options) {

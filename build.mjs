@@ -3,7 +3,7 @@
  * Uses esbuild to generate UMD, ESM, and minified bundles
  */
 import { build } from 'esbuild';
-import { readFileSync, mkdirSync } from 'fs';
+import { readFileSync, mkdirSync, copyFileSync } from 'fs';
 
 const pkg = JSON.parse(readFileSync('./package.json', 'utf8'));
 const version = pkg.version;
@@ -18,48 +18,62 @@ const banner = `/**
 // Ensure dist/ directory exists
 mkdirSync('dist', { recursive: true });
 
+// Common build options
+const commonOptions = {
+  bundle: true,
+  banner: { js: banner },
+  target: ['es2015'],
+  sourcemap: true,
+  // Mark Node.js built-ins as external so they are not bundled
+  // (they are resolved at runtime in Node.js environment)
+  external: ['child_process'],
+};
+
 // Build UMD (完整版)
 await build({
+  ...commonOptions,
   entryPoints: ['src/NowClipboard.js'],
-  bundle: true,
   format: 'iife',
   globalName: 'NowClipboard',
   outfile: 'dist/NowClipboard.js',
-  banner: { js: banner },
-  target: ['es2015'],
-  platform: 'browser',
+  platform: 'neutral',
 });
 
-// Build ESM
+// Build ESM (with named exports via ESM entry point)
 await build({
-  entryPoints: ['src/NowClipboard.js'],
-  bundle: true,
+  ...commonOptions,
+  entryPoints: ['src/NowClipboard.esm.js'],
   format: 'esm',
   outfile: 'dist/NowClipboard.esm.mjs',
-  banner: { js: banner },
-  target: ['es2015'],
-  platform: 'browser',
+  platform: 'neutral',
 });
 
 // Build minified UMD
 await build({
+  ...commonOptions,
   entryPoints: ['src/NowClipboard.js'],
-  bundle: true,
   format: 'iife',
   globalName: 'NowClipboard',
   outfile: 'dist/NowClipboard.min.js',
-  banner: { js: banner },
   minify: true,
-  target: ['es2015'],
-  platform: 'browser',
+  platform: 'neutral',
 });
 
 // Copy type definitions
-import { copyFileSync } from 'fs';
 copyFileSync('NowClipboard.d.ts', 'dist/NowClipboard.d.ts');
 
+// Copy dist/ files to root for npm publish (package.json "files" field references root)
+copyFileSync('dist/NowClipboard.js', 'NowClipboard.js');
+copyFileSync('dist/NowClipboard.esm.mjs', 'NowClipboard.esm.mjs');
+copyFileSync('dist/NowClipboard.min.js', 'NowClipboard.min.js');
+// Source maps
+copyFileSync('dist/NowClipboard.js.map', 'NowClipboard.js.map');
+copyFileSync('dist/NowClipboard.esm.mjs.map', 'NowClipboard.esm.mjs.map');
+copyFileSync('dist/NowClipboard.min.js.map', 'NowClipboard.min.js.map');
+
 console.log(`✅ Build complete: NowClipboard v${version}`);
-console.log('  dist/NowClipboard.js      (UMD)');
-console.log('  dist/NowClipboard.esm.mjs (ESM)');
-console.log('  dist/NowClipboard.min.js  (UMD minified)');
-console.log('  dist/NowClipboard.d.ts    (TypeScript definitions)');
+console.log('  dist/NowClipboard.js        (UMD)');
+console.log('  dist/NowClipboard.esm.mjs   (ESM with named exports)');
+console.log('  dist/NowClipboard.min.js   (UMD minified)');
+console.log('  dist/NowClipboard.d.ts      (TypeScript definitions)');
+console.log('  (+ copied to root for npm publish)');

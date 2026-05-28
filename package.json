@@ -1,29 +1,28 @@
 {
   "name": "nowclipboard",
-  "version": "1.1.4",
+  "version": "1.1.5",
   "description": "现代剪贴板工具库 - 零依赖，支持浏览器和 Node.js 双环境",
-  "main": "dist/NowClipboard.js",
-  "module": "dist/NowClipboard.esm.mjs",
-  "types": "dist/NowClipboard.d.ts",
+  "main": "NowClipboard.js",
+  "module": "NowClipboard.esm.mjs",
+  "types": "NowClipboard.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/NowClipboard.d.ts",
-      "import": "./dist/NowClipboard.esm.mjs",
-      "require": "./dist/NowClipboard.js"
+      "types": "./NowClipboard.d.ts",
+      "import": "./NowClipboard.esm.mjs",
+      "require": "./NowClipboard.js"
     }
   },
   "files": [
-    "dist/",
+    "NowClipboard.js",
+    "NowClipboard.js.map",
+    "NowClipboard.esm.mjs",
+    "NowClipboard.esm.mjs.map",
+    "NowClipboard.min.js",
+    "NowClipboard.min.js.map",
+    "NowClipboard.d.ts",
     "README.md",
     "README.en.md"
   ],
-  "scripts": {
-    "build": "node build.mjs",
-    "prepublishOnly": "npm run build"
-  },
-  "engines": {
-    "node": ">=14"
-  },
   "keywords": [
     "clipboard",
     "copy",
@@ -45,7 +44,14 @@
   "bugs": {
     "url": "https://github.com/Spicy-Mustard/NowClipboard/issues"
   },
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
+  },
   "devDependencies": {
-    "esbuild": "^0.28.0"
+    "jsdom": "^29.1.1",
+    "vitest": "^4.1.7"
   }
 }
