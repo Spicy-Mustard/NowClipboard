@@ -1,5 +1,5 @@
 /**
- * NowClipboard v1.1.5
+ * NowClipboard v1.1.6
  * Modern clipboard utility library - Clipboard API + execCommand fallback + Node.js adapter
  * Zero dependencies, supports both browser and Node.js environments
  * 
@@ -51,7 +51,6 @@
    */
   function isClipboardAPIAvailable() {
     return _isBrowser &&
-      typeof navigator !== 'undefined' &&
       navigator.clipboard != null &&
       typeof navigator.clipboard.writeText === 'function';
   }
@@ -61,7 +60,6 @@
    */
   function isClipboardItemSupported() {
     return _isBrowser &&
-      typeof navigator !== 'undefined' &&
       navigator.clipboard != null &&
       typeof navigator.clipboard.write === 'function' &&
       typeof ClipboardItem === 'function';
@@ -72,7 +70,6 @@
    */
   function isClipboardReadSupported() {
     return _isBrowser &&
-      typeof navigator !== 'undefined' &&
       navigator.clipboard != null &&
       typeof navigator.clipboard.read === 'function';
   }
@@ -423,7 +420,7 @@
 
     return retryOperation(function () {
       // Browser: use modern Clipboard API
-      if (_isBrowser && typeof navigator !== 'undefined' &&
+      if (_isBrowser &&
           navigator.clipboard != null &&
           typeof navigator.clipboard.readText === 'function') {
         return modernRead();
@@ -510,9 +507,8 @@
             bytes[i] = binary.charCodeAt(i);
           }
         } else {
-          bytes = new Uint8Array(decodeURIComponent(data).split('').map(function (c) {
-            return c.charCodeAt(0);
-          }));
+          // Use TextEncoder for proper UTF-8 encoding (handles BMP+ characters like emoji)
+          bytes = new Uint8Array(new TextEncoder().encode(decodeURIComponent(data)));
         }
         return resolvedPromise(new Blob([bytes], { type: mime }));
       } catch (e) {
@@ -729,10 +725,17 @@
         }
         var delay = Math.pow(2, attempt - 1) * cfg.retryDelay;
         return new Promise(function (resolve, reject) {
-          var timer = setTimeout(resolve, delay);
+          var onAbort = null;
+          var timer = setTimeout(function () {
+            // Clean up abort listener before resolving to prevent memory leak
+            if (onAbort && signal) {
+              signal.removeEventListener('abort', onAbort);
+            }
+            resolve();
+          }, delay);
           // Listen for abort during delay
           if (signal) {
-            var onAbort = function () {
+            onAbort = function () {
               clearTimeout(timer);
               reject(new DOMException('Operation aborted', 'AbortError'));
             };
@@ -937,12 +940,17 @@
     return new Promise(function (resolve, reject) {
       try {
         var spawn = require('child_process').spawn;
-        var proc = spawn('xsel', ['--clipboard', '--output'], { stdio: ['ignore', 'pipe', 'ignore'] });
+        var proc = spawn('xsel', ['--clipboard', '--output'], { stdio: ['ignore', 'pipe', 'pipe'] });
         var output = '';
+        var errOutput = '';
         var finished = false;
 
         proc.stdout.on('data', function (chunk) {
-          output += chunk.toString();
+          output += chunk.toString('utf8');
+        });
+
+        proc.stderr.on('data', function (chunk) {
+          errOutput += chunk.toString('utf8');
         });
 
         proc.on('error', function (err) {
@@ -956,9 +964,10 @@
           if (!finished) {
             finished = true;
             if (code === 0) {
-              resolve(output);
+              resolve(output.replace(/\r?\n$/, ''));
             } else {
-              reject(new Error('xsel read exited with code: ' + code));
+              reject(new Error('xsel read exited with code: ' + code +
+                (errOutput ? ' - ' + errOutput.trim() : '')));
             }
           }
         });
@@ -986,7 +995,7 @@
    * @returns {Promise<{ state: string }>}
    */
   function queryClipboardPermission(permissionName) {
-    if (!_isBrowser || typeof navigator === 'undefined' || !navigator.permissions ||
+    if (!_isBrowser || !navigator.permissions ||
         !_isFunction(navigator.permissions.query)) {
       return resolvedPromise({ state: 'prompt' });
     }
@@ -1534,7 +1543,13 @@
    */
   NowClipboard.onPaste = function (target, callback) {
     if (!_isBrowser) {
-      return rejectedPromise(new Error('NowClipboard.onPaste() is only available in browser environment'));
+      // Return a destroyable stub so callers can safely call .destroy()
+      // The returned object does nothing but prevents TypeError
+      return {
+        destroy: function () {
+          // No-op: onPaste not supported outside browser
+        }
+      };
     }
     return bindPasteListener(target, callback);
   };
@@ -1547,7 +1562,12 @@
    */
   NowClipboard.onChange = function (callback, interval) {
     if (!_isBrowser) {
-      return rejectedPromise(new Error('NowClipboard.onChange() is only available in browser environment'));
+      // Return a destroyable stub so callers can safely call .destroy()
+      return {
+        destroy: function () {
+          // No-op: onChange not supported outside browser
+        }
+      };
     }
     if (!_isFunction(callback)) {
       throw new TypeError('NowClipboard.onChange() expects a callback function');
@@ -1572,7 +1592,10 @@
           try {
             callback({ text: text });
           } catch (e) {
-            // Don't let callback errors break the polling loop
+            // Don't let callback errors break the polling loop, but warn for debugging
+            if (typeof console !== 'undefined' && console.warn) {
+              console.warn('NowClipboard onChange callback error:', e);
+            }
           }
         }
       }).catch(function () {

@@ -8,16 +8,20 @@ Modern clipboard utility library -- zero dependencies, supports both browser and
 
 - **Modern API First** -- Prioritizes `navigator.clipboard.writeText()`, auto-fallback to `document.execCommand`
 - **Promise-based** -- All operations return Promises, supports async/await
-- **Auto Retry** -- Built-in configurable exponential backoff retry with timeout control
-- **Dual Environment** -- Browser + Node.js (Windows `clip` / macOS `pbcopy` / Linux `xclip`/`xsel`)
+- **Auto Retry** -- Built-in configurable exponential backoff retry with timeout control and AbortSignal cancellation
+- **Dual Environment** -- Browser + Node.js (Windows PowerShell / macOS `pbcopy` / Linux `xclip`/`xsel`)
 - **Read & Write** -- Supports writing (copy/cut) and reading (paste) clipboard
+- **Rich Content Read** -- `readRich()` reads clipboard text, HTML, and images
 - **Paste Listener** -- Listen to paste events via `onPaste`, auto-parses text, HTML, and files
+- **Change Listener** -- `onChange` polls clipboard for content changes
 - **Permission Detection** -- Query clipboard read/write permission status via `queryPermission`
 - **HTML Attribute Binding** -- Declarative copy behavior via `data-nc-*` attributes
 - **Event Delegation** -- Supports CSS selector strings, Element, and NodeList as triggers
-- **Resource Safety** -- Comprehensive `destroy()` method prevents memory leaks
-- **Image Copy** -- Supports Blob, File, HTMLImageElement, HTMLCanvasElement, URL and more
+- **Resource Safety** -- Comprehensive `destroy()` method prevents memory leaks; calling methods after destroy throws errors
+- **Image Copy** -- Supports Blob, File, HTMLImageElement, HTMLCanvasElement, URL, and data: URLs
 - **Rich Text Copy** -- Copy HTML + plain text simultaneously, auto-fallback to execCommand
+- **iOS Safari Compatible** -- Special fallback handling for mobile Safari
+- **data URL Optimization** -- data: URLs are decoded directly to Blob, no fetch network request needed
 - **TypeScript** -- Built-in complete `.d.ts` type definitions
 - **ESM Support** -- ESM module version available, supports `import` syntax and tree-shaking
 - **Zero Dependencies** -- Single file, no external dependencies
@@ -70,7 +74,7 @@ require(['NowClipboard'], function (NowClipboard) {
 import NowClipboard from 'nowclipboard';
 
 // Named imports (tree-shakeable)
-import { copy, read, copyImage, copyRich } from 'nowclipboard';
+import { copy, read, readRich, copyImage, copyRich, onChange } from 'nowclipboard';
 ```
 
 ## Usage
@@ -136,7 +140,10 @@ var clipboard = new NowClipboard('.btn', {
   // Retry configuration
   retries: 3,        // Max retries (default: 2)
   retryDelay: 200,   // Base delay in ms (default: 100, exponential backoff)
-  timeout: 5000      // Timeout in ms (default: 0, no timeout)
+  timeout: 5000,     // Timeout in ms (default: 0, no timeout)
+
+  // AbortSignal to cancel operations
+  signal: abortController.signal
 });
 ```
 
@@ -153,6 +160,13 @@ NowClipboard.copy('Hello World')
   .catch(function (err) {
     console.error('Failed:', err.message);
   });
+
+// Cancel with AbortSignal
+var controller = new AbortController();
+NowClipboard.copy('Hello World', { signal: controller.signal });
+
+// Abort after 1 second
+setTimeout(function () { controller.abort(); }, 1000);
 
 // async/await
 async function doCopy() {
@@ -173,6 +187,11 @@ var textarea = document.querySelector('#myTextarea');
 NowClipboard.cut(textarea).then(function (text) {
   console.log('Cut:', text);
 });
+
+// With retry configuration
+NowClipboard.cut(textarea, { retries: 3, timeout: 5000 }).then(function (text) {
+  console.log('Cut:', text);
+});
 ```
 
 ### 5. Read Clipboard
@@ -189,7 +208,22 @@ NowClipboard.read({ retries: 3, timeout: 3000 }).then(function (text) {
 });
 ```
 
-### 6. Paste Event Listener
+### 6. Read Rich Clipboard Content
+
+Read plain text, HTML, and images from the clipboard. Requires HTTPS + modern browser with `clipboard.read()` API support.
+
+```js
+NowClipboard.readRich().then(function (result) {
+  console.log('Plain text:', result.text);
+  console.log('HTML:', result.html);
+  console.log('Image count:', result.images.length);
+});
+
+// With retry and timeout configuration
+NowClipboard.readRich({ retries: 3, timeout: 5000 });
+```
+
+### 7. Paste Event Listener
 
 ```js
 // Listen to paste events on the entire page
@@ -209,7 +243,22 @@ var listener2 = NowClipboard.onPaste('.paste-area', function (data) {
 listener.destroy();
 ```
 
-### 7. Permission Detection
+### 8. Clipboard Change Listener
+
+Poll clipboard for content changes, trigger callback when content changes.
+
+```js
+var watcher = NowClipboard.onChange(function (data) {
+  console.log('Clipboard changed:', data.text);
+}, 1000); // Polling interval 1000ms (default)
+
+// Destroy watcher
+watcher.destroy();
+```
+
+> ⚠️ `onChange` uses polling to read the clipboard. In browsers, the page must be focused and have read permission. Frequent polling may trigger permission prompts in some browsers.
+
+### 9. Permission Detection
 
 ```js
 // Check read permission
@@ -223,7 +272,7 @@ NowClipboard.queryPermission('write').then(function (result) {
 });
 ```
 
-### 8. Copy Image
+### 10. Copy Image
 
 Requires HTTPS + modern browser (ClipboardItem API support).
 
@@ -233,6 +282,9 @@ NowClipboard.copyImage('https://example.com/photo.png')
   .then(function (blob) {
     console.log('Image copied, size:', blob.size);
   });
+
+// Copy data: URL (no network request, decoded directly to Blob)
+NowClipboard.copyImage('data:image/png;base64,...');
 
 // Copy from Canvas
 var canvas = document.querySelector('#myCanvas');
@@ -247,7 +299,7 @@ var blob = new Blob([data], { type: 'image/png' });
 NowClipboard.copyBlob(blob);
 ```
 
-### 9. Copy Rich Text
+### 11. Copy Rich Text
 
 Copy HTML and plain text simultaneously, preserving formatting on paste.
 
@@ -257,6 +309,14 @@ NowClipboard.copyRich({
   html: '<b>Bold</b> and <em>italic</em> rich text'
 }).then(function (result) {
   console.log('Copied:', result.text, result.html);
+});
+
+// With AbortSignal
+var controller = new AbortController();
+NowClipboard.copyRich({
+  text: 'Plain text',
+  html: '<b>Rich text</b>',
+  signal: controller.signal
 });
 ```
 
@@ -272,7 +332,7 @@ Rich text copy via HTML attributes:
 </button>
 ```
 
-### 10. Node.js Environment
+### 12. Node.js Environment
 
 ```js
 var NowClipboard = require('./NowClipboard.js');
@@ -293,7 +353,7 @@ NowClipboard.read().then(function (text) {
 
 | OS | Write Command | Read Command | Note |
 |----|---------------|--------------|------|
-| Windows | `clip` | `powershell Get-Clipboard` | Built-in |
+| Windows | `powershell -EncodedCommand` | `powershell -EncodedCommand` | Uses Base64 encoding to pass text, avoiding Unicode encoding issues |
 | macOS | `pbcopy` | `pbpaste` | Built-in |
 | Linux | `xclip` | `xclip -o` | Install: `sudo apt install xclip` |
 | Linux (fallback) | `xsel` | `xsel -o` | Alternative: `sudo apt install xsel` |
@@ -316,14 +376,15 @@ new NowClipboard(trigger, [options])
 | `options.retries` | `number` | Max retry count, default `2` |
 | `options.retryDelay` | `number` | Base retry delay in ms, default `100` (exponential backoff) |
 | `options.timeout` | `number` | Timeout in ms, default `0` (no timeout) |
+| `options.signal` | `AbortSignal \| null` | Signal to cancel operations |
 
 ### Instance Methods
 
 | Method | Description |
 |--------|-------------|
-| `.on(event, handler)` | Register event listener |
-| `.once(event, handler)` | Register one-time event listener |
-| `.off(event, handler)` | Remove event listener |
+| `.on(event, handler)` | Register event listener (throws after destroy) |
+| `.once(event, handler)` | Register one-time event listener (throws after destroy) |
+| `.off(event, handler)` | Remove event listener (throws after destroy) |
 | `.destroy()` | Destroy instance, remove all event listeners and DOM bindings |
 
 ### Static Methods
@@ -331,14 +392,25 @@ new NowClipboard(trigger, [options])
 | Method | Returns | Description |
 |--------|---------|-------------|
 | `NowClipboard.copy(text, [options])` | `Promise<string>` | Copy text to clipboard |
-| `NowClipboard.cut(element)` | `Promise<string>` | Cut element content (browser only) |
+| `NowClipboard.cut(element, [options])` | `Promise<string>` | Cut element content (browser only) |
 | `NowClipboard.read([options])` | `Promise<string>` | Read clipboard text |
-| `NowClipboard.copyImage(source, [options])` | `Promise<Blob>` | Copy image (Blob/File/Img/Canvas/URL) |
+| `NowClipboard.readRich([options])` | `Promise<{text, html, images}>` | Read rich clipboard content (text+HTML+images, browser only) |
+| `NowClipboard.copyImage(source, [options])` | `Promise<Blob>` | Copy image (Blob/File/Img/Canvas/URL/data: URL) |
 | `NowClipboard.copyBlob(blob, [mimeType], [options])` | `Promise<Blob>` | Copy any Blob to clipboard |
 | `NowClipboard.copyRich(options)` | `Promise<{text, html}>` | Copy rich text (HTML + plain text) |
 | `NowClipboard.onPaste(target, callback)` | `{ destroy }` | Listen to paste events (browser only) |
+| `NowClipboard.onChange(callback, [interval])` | `{ destroy }` | Listen to clipboard changes (browser only, polling) |
 | `NowClipboard.queryPermission(name)` | `Promise<{ state }>` | Query clipboard permission (`'read'`/`'write'`) |
 | `NowClipboard.checkSupport([actions])` | `boolean` | Check if clipboard operations are supported |
+
+### RetryOptions
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `retries` | `number` | `2` | Max retry count |
+| `retryDelay` | `number` | `100` | Base retry delay in ms (exponential backoff) |
+| `timeout` | `number` | `0` | Timeout in ms (0 = no timeout) |
+| `signal` | `AbortSignal \| null` | `null` | Signal to cancel operations |
 
 ### Events
 
@@ -388,13 +460,13 @@ The library automatically tries the best available method in order:
 2. document.execCommand('copy')       (HTTP + legacy browsers)
        |
        v fails
-3. child_process (clip/pbcopy/xclip)  (Node.js environment)
+3. child_process (PowerShell/pbcopy/xclip)  (Node.js environment)
        |
        v fails
 4. Throws error, fires 'error' event
 ```
 
-Each layer retries automatically on failure (default: up to 2 retries, exponential backoff). Retry count, delay, and timeout are all configurable.
+Each layer retries automatically on failure (default: up to 2 retries, exponential backoff). Retry count, delay, and timeout are all configurable. Supports cancellation via `AbortSignal`.
 
 ## Supported Element Types
 
@@ -462,18 +534,21 @@ NowClipboard prioritizes the modern [Clipboard API](https://developer.mozilla.or
 | Feature | ClipboardJS | NowClipboard.js |
 |---------|-------------|-----------------|
 | Copy Method | `execCommand` only | Clipboard API + execCommand fallback |
-| Image Copy | Not supported | Supported (Blob/File/Img/Canvas/URL) |
+| Image Copy | Not supported | Supported (Blob/File/Img/Canvas/URL/data: URL) |
 | Rich Text Copy | Not supported | Supported (HTML + plain text) |
 | Read Clipboard | Not supported | Supported (browser + Node.js) |
+| Rich Content Read | Not supported | Supported (readRich: text+HTML+images) |
 | Paste Listener | Not supported | Supported (onPaste + auto-parse) |
+| Change Listener | Not supported | Supported (onChange polling) |
 | Permission Check | Not supported | Supported (queryPermission) |
 | Async | Synchronous | Promise-based |
-| Retry | None | Configurable retry + exponential backoff + timeout |
+| Retry | None | Configurable retry + exponential backoff + timeout + AbortSignal |
 | Node.js | Not supported | Supported (Win/Mac/Linux) |
 | TypeScript | No type definitions | Built-in `.d.ts` type definitions |
 | ESM | Not supported | Supported (ESM + UMD dual format) |
+| iOS Safari | Not handled | Auto-fallback handling |
 | Source Code | Minified/obfuscated | Readable, with comments |
-| Destroy | Basic | Comprehensive (prevents memory leaks) |
+| Destroy | Basic | Comprehensive (prevents memory leaks + post-destroy protection) |
 
 ## Full Example
 

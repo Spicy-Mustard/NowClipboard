@@ -1,5 +1,5 @@
 /**
- * NowClipboard v1.1.5
+ * NowClipboard v1.1.6
  * Modern clipboard utility library - Clipboard API + execCommand fallback + Node.js adapter
  * Zero dependencies, supports both browser and Node.js environments
  *
@@ -67,13 +67,13 @@ var require_NowClipboard = __commonJS({
       }
       var _isIOS = _isBrowser && /iPhone|iPad|iPod/.test(navigator.userAgent) && !window.MSStream;
       function isClipboardAPIAvailable() {
-        return _isBrowser && typeof navigator !== "undefined" && navigator.clipboard != null && typeof navigator.clipboard.writeText === "function";
+        return _isBrowser && navigator.clipboard != null && typeof navigator.clipboard.writeText === "function";
       }
       function isClipboardItemSupported() {
-        return _isBrowser && typeof navigator !== "undefined" && navigator.clipboard != null && typeof navigator.clipboard.write === "function" && typeof ClipboardItem === "function";
+        return _isBrowser && navigator.clipboard != null && typeof navigator.clipboard.write === "function" && typeof ClipboardItem === "function";
       }
       function isClipboardReadSupported() {
-        return _isBrowser && typeof navigator !== "undefined" && navigator.clipboard != null && typeof navigator.clipboard.read === "function";
+        return _isBrowser && navigator.clipboard != null && typeof navigator.clipboard.read === "function";
       }
       function isExecCommandSupported(action) {
         if (!_isBrowser) return false;
@@ -319,7 +319,7 @@ var require_NowClipboard = __commonJS({
       function readText(options) {
         var opts = options || {};
         return retryOperation(function() {
-          if (_isBrowser && typeof navigator !== "undefined" && navigator.clipboard != null && typeof navigator.clipboard.readText === "function") {
+          if (_isBrowser && navigator.clipboard != null && typeof navigator.clipboard.readText === "function") {
             return modernRead();
           }
           if (_isNode) {
@@ -375,9 +375,7 @@ var require_NowClipboard = __commonJS({
                 bytes[i] = binary.charCodeAt(i);
               }
             } else {
-              bytes = new Uint8Array(decodeURIComponent(data).split("").map(function(c) {
-                return c.charCodeAt(0);
-              }));
+              bytes = new Uint8Array(new TextEncoder().encode(decodeURIComponent(data)));
             }
             return resolvedPromise(new Blob([bytes], { type: mime }));
           } catch (e) {
@@ -517,9 +515,15 @@ var require_NowClipboard = __commonJS({
             }
             var delay = Math.pow(2, attempt - 1) * cfg.retryDelay;
             return new Promise(function(resolve, reject) {
-              var timer = setTimeout(resolve, delay);
+              var onAbort = null;
+              var timer = setTimeout(function() {
+                if (onAbort && signal) {
+                  signal.removeEventListener("abort", onAbort);
+                }
+                resolve();
+              }, delay);
               if (signal) {
-                var onAbort = function() {
+                onAbort = function() {
                   clearTimeout(timer);
                   reject(new DOMException("Operation aborted", "AbortError"));
                 };
@@ -681,11 +685,15 @@ var require_NowClipboard = __commonJS({
         return new Promise(function(resolve, reject) {
           try {
             var spawn = __require("child_process").spawn;
-            var proc = spawn("xsel", ["--clipboard", "--output"], { stdio: ["ignore", "pipe", "ignore"] });
+            var proc = spawn("xsel", ["--clipboard", "--output"], { stdio: ["ignore", "pipe", "pipe"] });
             var output = "";
+            var errOutput = "";
             var finished = false;
             proc.stdout.on("data", function(chunk) {
-              output += chunk.toString();
+              output += chunk.toString("utf8");
+            });
+            proc.stderr.on("data", function(chunk) {
+              errOutput += chunk.toString("utf8");
             });
             proc.on("error", function(err) {
               if (!finished) {
@@ -697,9 +705,9 @@ var require_NowClipboard = __commonJS({
               if (!finished) {
                 finished = true;
                 if (code === 0) {
-                  resolve(output);
+                  resolve(output.replace(/\r?\n$/, ""));
                 } else {
-                  reject(new Error("xsel read exited with code: " + code));
+                  reject(new Error("xsel read exited with code: " + code + (errOutput ? " - " + errOutput.trim() : "")));
                 }
               }
             });
@@ -715,7 +723,7 @@ var require_NowClipboard = __commonJS({
         return Promise.reject(err);
       }
       function queryClipboardPermission(permissionName) {
-        if (!_isBrowser || typeof navigator === "undefined" || !navigator.permissions || !_isFunction(navigator.permissions.query)) {
+        if (!_isBrowser || !navigator.permissions || !_isFunction(navigator.permissions.query)) {
           return resolvedPromise({ state: "prompt" });
         }
         try {
@@ -1082,13 +1090,19 @@ var require_NowClipboard = __commonJS({
       };
       NowClipboard2.onPaste = function(target, callback) {
         if (!_isBrowser) {
-          return rejectedPromise(new Error("NowClipboard.onPaste() is only available in browser environment"));
+          return {
+            destroy: function() {
+            }
+          };
         }
         return bindPasteListener(target, callback);
       };
       NowClipboard2.onChange = function(callback, interval) {
         if (!_isBrowser) {
-          return rejectedPromise(new Error("NowClipboard.onChange() is only available in browser environment"));
+          return {
+            destroy: function() {
+            }
+          };
         }
         if (!_isFunction(callback)) {
           throw new TypeError("NowClipboard.onChange() expects a callback function");
@@ -1110,6 +1124,9 @@ var require_NowClipboard = __commonJS({
               try {
                 callback({ text });
               } catch (e) {
+                if (typeof console !== "undefined" && console.warn) {
+                  console.warn("NowClipboard onChange callback error:", e);
+                }
               }
             }
           }).catch(function() {
