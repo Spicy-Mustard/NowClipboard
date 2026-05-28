@@ -108,7 +108,7 @@
     <header>
       <h1>NowClipboard</h1>
       <p>现代剪贴板工具库 — 交互演示</p>
-      <span class="badge">v1.1.8</span>
+      <span class="badge">v1.1.9</span>
     </header>
 
     <div class="status-bar">
@@ -279,7 +279,7 @@ var watcher = null;
   ctx.textAlign = 'center';
   ctx.fillText('NowClipboard', 100, 55);
   ctx.font = '13px sans-serif';
-  ctx.fillText('v1.1.8', 100, 78);
+  ctx.fillText('v1.1.9', 100, 78);
 })();
 
 // 检测环境
@@ -329,7 +329,7 @@ async function demoCopyRich() {
 
 // 复制 Emoji — NowClipboard.copy(text)
 async function demoCopyEmoji() {
-  var text = '\ud83d\ude80 NowClipboard v1.1.8 \ud83c\udf89 \ud83d\udc4b';
+  var text = '\ud83d\ude80 NowClipboard v1.1.9 \ud83c\udf89 \ud83d\udc4b';
   try {
     await NB.copy(text);
     log('copyLog', '\u2705 已复制 Emoji 文本：' + text);
@@ -484,7 +484,7 @@ var syncInstance = null;
   ctx.textAlign = 'center';
   ctx.fillText('writeImage()', 100, 45);
   ctx.font = '12px sans-serif';
-  ctx.fillText('v1.1.8', 100, 68);
+  ctx.fillText('v1.1.9', 100, 68);
 })();
 
 // write 别名 — NowClipboard.write(text)
@@ -657,7 +657,7 @@ async function demoSyncBroadcast() {
     return;
   }
   try {
-    await NB.copy('\ud83d\udce1 广播测试 v1.1.8');
+    await NB.copy('\ud83d\udce1 广播测试 v1.1.9');
     log('syncLog', '\u2705 已广播复制操作到其他标签页');
   } catch (e) {
     log('syncLog', '\u274c 广播失败：' + e.message, true);

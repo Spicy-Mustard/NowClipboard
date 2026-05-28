@@ -1,5 +1,5 @@
 /**
- * NowClipboard Test Config v1.1.8
+ * NowClipboard Test Config v1.1.9
  */
 import { defineConfig } from 'vitest/config';
 
