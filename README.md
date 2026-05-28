@@ -8,16 +8,20 @@
 
 - **现代 API 优先** -- 优先使用 `navigator.clipboard.writeText()`，自动降级到 `document.execCommand`
 - **Promise 异步** -- 所有操作返回 Promise，支持 async/await
-- **自动重试** -- 内置可配置的指数退避重试机制，支持超时控制
-- **双环境支持** -- 浏览器 + Node.js（Windows `clip` / macOS `pbcopy` / Linux `xclip`/`xsel`）
+- **自动重试** -- 内置可配置的指数退避重试机制，支持超时控制和 AbortSignal 取消
+- **双环境支持** -- 浏览器 + Node.js（Windows PowerShell / macOS `pbcopy` / Linux `xclip`/`xsel`）
 - **读写双向** -- 支持写入（复制/剪切）和读取（粘贴）剪贴板
+- **富内容读取** -- `readRich()` 读取剪贴板中的文本、HTML 和图片
 - **粘贴监听** -- 通过 `onPaste` 监听粘贴事件，自动解析文本、HTML、文件
+- **变更监听** -- 通过 `onChange` 轮询监听剪贴板内容变化
 - **权限检测** -- 通过 `queryPermission` 查询剪贴板读写权限状态
 - **HTML 属性绑定** -- 通过 `data-nc-*` 属性声明式绑定复制行为
 - **事件委托** -- 支持选择器字符串、Element、NodeList 三种触发方式
-- **资源安全** -- 完善的 `destroy()` 方法防止内存泄漏
+- **资源安全** -- 完善的 `destroy()` 方法防止内存泄漏，destroy 后调用方法会抛错
 - **图片复制** -- 支持 Blob、File、HTMLImageElement、HTMLCanvasElement、URL 等多种图片源
 - **富文本复制** -- 同时复制 HTML + 纯文本，自动降级到 execCommand
+- **iOS Safari 适配** -- 针对移动端 Safari 的特殊降级处理
+- **data URL 优化** -- data: URL 直接解码为 Blob，不走 fetch 网络请求
 - **TypeScript** -- 内置完整的 `.d.ts` 类型定义
 - **ESM 支持** -- 提供 ESM 模块版本，支持 `import` 语法和 Tree-shaking
 - **零依赖** -- 单文件，无任何外部依赖
@@ -70,7 +74,7 @@ require(['NowClipboard'], function (NowClipboard) {
 import NowClipboard from 'nowclipboard';
 
 // 命名导入（按需引入）
-import { copy, read, copyImage, copyRich } from 'nowclipboard';
+import { copy, read, readRich, copyImage, copyRich, onChange } from 'nowclipboard';
 ```
 
 ## 使用方式
@@ -136,7 +140,10 @@ var clipboard = new NowClipboard('.btn', {
   // 重试配置
   retries: 3,        // 最大重试次数（默认 2）
   retryDelay: 200,   // 基础延迟 ms（默认 100，指数退避）
-  timeout: 5000      // 超时 ms（默认 0，不超时）
+  timeout: 5000,     // 超时 ms（默认 0，不超时）
+
+  // AbortSignal 取消操作
+  signal: abortController.signal
 });
 ```
 
@@ -153,6 +160,13 @@ NowClipboard.copy('Hello World')
   .catch(function (err) {
     console.error('失败:', err.message);
   });
+
+// 使用 AbortSignal 取消操作
+var controller = new AbortController();
+NowClipboard.copy('Hello World', { signal: controller.signal });
+
+// 1 秒后取消
+setTimeout(function () { controller.abort(); }, 1000);
 
 // async/await 写法
 async function doCopy() {
@@ -173,6 +187,11 @@ var textarea = document.querySelector('#myTextarea');
 NowClipboard.cut(textarea).then(function (text) {
   console.log('已剪切:', text);
 });
+
+// 带重试配置
+NowClipboard.cut(textarea, { retries: 3, timeout: 5000 }).then(function (text) {
+  console.log('已剪切:', text);
+});
 ```
 
 ### 5. 读取剪贴板
@@ -189,7 +208,22 @@ NowClipboard.read({ retries: 3, timeout: 3000 }).then(function (text) {
 });
 ```
 
-### 6. 粘贴事件监听
+### 6. 读取剪贴板富内容
+
+读取剪贴板中的纯文本、HTML 和图片。需要 HTTPS + 支持 `clipboard.read()` API 的现代浏览器。
+
+```js
+NowClipboard.readRich().then(function (result) {
+  console.log('纯文本:', result.text);
+  console.log('HTML:', result.html);
+  console.log('图片数量:', result.images.length);
+});
+
+// 带重试和超时配置
+NowClipboard.readRich({ retries: 3, timeout: 5000 });
+```
+
+### 7. 粘贴事件监听
 
 ```js
 // 监听整个页面的粘贴事件
@@ -209,7 +243,22 @@ var listener2 = NowClipboard.onPaste('.paste-area', function (data) {
 listener.destroy();
 ```
 
-### 7. 权限检测
+### 8. 剪贴板变更监听
+
+轮询检测剪贴板内容变化，当内容改变时触发回调。
+
+```js
+var watcher = NowClipboard.onChange(function (data) {
+  console.log('剪贴板内容变更:', data.text);
+}, 1000); // 轮询间隔 1000ms（默认）
+
+// 销毁监听
+watcher.destroy();
+```
+
+> ⚠️ `onChange` 使用轮询方式读取剪贴板，浏览器中需要页面获焦且有读取权限。频繁轮询可能在某些浏览器触发权限弹窗。
+
+### 9. 权限检测
 
 ```js
 // 检测读取权限
@@ -223,7 +272,7 @@ NowClipboard.queryPermission('write').then(function (result) {
 });
 ```
 
-### 8. 复制图片
+### 10. 复制图片
 
 需要 HTTPS + 现代浏览器（支持 ClipboardItem API）。
 
@@ -233,6 +282,9 @@ NowClipboard.copyImage('https://example.com/photo.png')
   .then(function (blob) {
     console.log('图片已复制，大小:', blob.size);
   });
+
+// 复制 data: URL（不走网络请求，直接解码为 Blob）
+NowClipboard.copyImage('data:image/png;base64,...');
 
 // 复制 Canvas 画布
 var canvas = document.querySelector('#myCanvas');
@@ -247,7 +299,7 @@ var blob = new Blob([data], { type: 'image/png' });
 NowClipboard.copyBlob(blob);
 ```
 
-### 9. 复制富文本
+### 11. 复制富文本
 
 同时复制 HTML 和纯文本，粘贴时保留格式。
 
@@ -257,6 +309,14 @@ NowClipboard.copyRich({
   html: '<b>加粗</b>的 <em>富文本</em> 内容'
 }).then(function (result) {
   console.log('已复制:', result.text, result.html);
+});
+
+// 支持 AbortSignal
+var controller = new AbortController();
+NowClipboard.copyRich({
+  text: '纯文本',
+  html: '<b>富文本</b>',
+  signal: controller.signal
 });
 ```
 
@@ -272,7 +332,7 @@ NowClipboard.copyRich({
 </button>
 ```
 
-### 10. Node.js 环境
+### 12. Node.js 环境
 
 ```js
 var NowClipboard = require('./NowClipboard.js');
@@ -293,7 +353,7 @@ NowClipboard.read().then(function (text) {
 
 | 操作系统 | 写入命令 | 读取命令 | 备注 |
 |---------|---------|---------|------|
-| Windows | `clip` | `powershell Get-Clipboard` | 系统内置 |
+| Windows | `powershell -EncodedCommand` | `powershell -EncodedCommand` | 使用 Base64 编码传递文本，避免 Unicode 编码问题 |
 | macOS | `pbcopy` | `pbpaste` | 系统内置 |
 | Linux | `xclip` | `xclip -o` | 需安装：`sudo apt install xclip` |
 | Linux (降级) | `xsel` | `xsel -o` | 备选：`sudo apt install xsel` |
@@ -316,14 +376,15 @@ new NowClipboard(trigger, [options])
 | `options.retries` | `number` | 最大重试次数，默认 `2` |
 | `options.retryDelay` | `number` | 基础重试延迟 ms，默认 `100`（指数退避） |
 | `options.timeout` | `number` | 超时 ms，默认 `0`（不超时） |
+| `options.signal` | `AbortSignal \| null` | 取消操作的信号 |
 
 ### 实例方法
 
 | 方法 | 说明 |
 |------|------|
-| `.on(event, handler)` | 注册事件监听 |
-| `.once(event, handler)` | 注册一次性事件监听 |
-| `.off(event, handler)` | 移除事件监听 |
+| `.on(event, handler)` | 注册事件监听（destroy 后调用会抛错） |
+| `.once(event, handler)` | 注册一次性事件监听（destroy 后调用会抛错） |
+| `.off(event, handler)` | 移除事件监听（destroy 后调用会抛错） |
 | `.destroy()` | 销毁实例，移除所有事件监听和 DOM 绑定 |
 
 ### 静态方法
@@ -331,14 +392,25 @@ new NowClipboard(trigger, [options])
 | 方法 | 返回值 | 说明 |
 |------|--------|------|
 | `NowClipboard.copy(text, [options])` | `Promise<string>` | 复制文本到剪贴板 |
-| `NowClipboard.cut(element)` | `Promise<string>` | 剪切元素内容（仅浏览器） |
+| `NowClipboard.cut(element, [options])` | `Promise<string>` | 剪切元素内容（仅浏览器） |
 | `NowClipboard.read([options])` | `Promise<string>` | 读取剪贴板文本 |
+| `NowClipboard.readRich([options])` | `Promise<{text, html, images}>` | 读取剪贴板富内容（文本+HTML+图片，仅浏览器） |
 | `NowClipboard.copyImage(source, [options])` | `Promise<Blob>` | 复制图片（支持 Blob/File/Img/Canvas/URL） |
 | `NowClipboard.copyBlob(blob, [mimeType], [options])` | `Promise<Blob>` | 复制任意 Blob 到剪贴板 |
 | `NowClipboard.copyRich(options)` | `Promise<{text, html}>` | 复制富文本（HTML + 纯文本） |
 | `NowClipboard.onPaste(target, callback)` | `{ destroy }` | 监听粘贴事件（仅浏览器） |
+| `NowClipboard.onChange(callback, [interval])` | `{ destroy }` | 监听剪贴板变更（仅浏览器，轮询方式） |
 | `NowClipboard.queryPermission(name)` | `Promise<{ state }>` | 查询剪贴板权限（`'read'`/`'write'`） |
 | `NowClipboard.checkSupport([actions])` | `boolean` | 检测环境是否支持剪贴板操作 |
+
+### RetryOptions 配置
+
+| 选项 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `retries` | `number` | `2` | 最大重试次数 |
+| `retryDelay` | `number` | `100` | 基础重试延迟 ms（指数退避） |
+| `timeout` | `number` | `0` | 超时 ms（0 = 不超时） |
+| `signal` | `AbortSignal \| null` | `null` | 取消操作的信号 |
 
 ### 事件
 
@@ -388,13 +460,13 @@ clipboard.on('error', function (e) {
 2. document.execCommand('copy')       (HTTP + 旧浏览器)
        |
        v 失败
-3. child_process (clip/pbcopy/xclip)  (Node.js 环境)
+3. child_process (PowerShell/pbcopy/xclip)  (Node.js 环境)
        |
        v 失败
 4. 抛出错误，触发 'error' 事件
 ```
 
-每层失败后自动重试（默认最多 2 次，指数退避），重试次数、延迟和超时均可配置。
+每层失败后自动重试（默认最多 2 次，指数退避），重试次数、延迟、超时均可配置。支持通过 `AbortSignal` 取消正在进行的操作。
 
 ## 支持的元素类型
 
@@ -462,18 +534,21 @@ NowClipboard 优先使用现代 [Clipboard API](https://developer.mozilla.org/en
 | 对比项 | ClipboardJS | NowClipboard.js |
 |--------|-------|-----------|
 | 复制方式 | 仅 `execCommand` | Clipboard API + execCommand 降级 |
-| 图片复制 | 不支持 | 支持（Blob/File/Img/Canvas/URL） |
+| 图片复制 | 不支持 | 支持（Blob/File/Img/Canvas/URL/data: URL） |
 | 富文本复制 | 不支持 | 支持（HTML + 纯文本同时复制） |
 | 读取剪贴板 | 不支持 | 支持（浏览器 + Node.js） |
+| 富内容读取 | 不支持 | 支持（readRich：文本+HTML+图片） |
 | 粘贴监听 | 不支持 | 支持（onPaste + 自动解析） |
+| 变更监听 | 不支持 | 支持（onChange 轮询检测） |
 | 权限检测 | 不支持 | 支持（queryPermission） |
 | 异步 | 同步 | Promise-based |
-| 重试 | 无 | 可配置重试 + 指数退避 + 超时 |
+| 重试 | 无 | 可配置重试 + 指数退避 + 超时 + AbortSignal |
 | Node.js | 不支持 | 支持 (Win/Mac/Linux) |
 | TypeScript | 无类型定义 | 内置 `.d.ts` 类型定义 |
 | ESM | 不支持 | 支持（ESM + UMD 双格式） |
+| iOS Safari | 未适配 | 自动降级适配 |
 | 代码 | 压缩混淆 | 可读、带注释 |
-| 销毁 | 基础 | 完善（防内存泄漏） |
+| 销毁 | 基础 | 完善（防内存泄漏 + destroy 后保护） |
 
 ## 完整示例
 

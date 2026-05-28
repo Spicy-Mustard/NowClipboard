@@ -1,4 +1,4 @@
-// NowClipboard TypeScript 类型定义 v1.1.4
+// NowClipboard TypeScript 类型定义 v1.1.5
 
 export interface RetryOptions {
   /** 最大重试次数，默认 2 */
@@ -7,6 +7,8 @@ export interface RetryOptions {
   retryDelay?: number;
   /** 超时 ms，默认 0（不超时） */
   timeout?: number;
+  /** AbortSignal，用于取消操作 */
+  signal?: AbortSignal | null;
 }
 
 export interface NowClipboardOptions extends RetryOptions {
@@ -74,6 +76,25 @@ export interface RichTextOptions extends RetryOptions {
   container?: Element;
 }
 
+export interface ReadRichResult {
+  /** 纯文本内容 */
+  text: string;
+  /** HTML 内容 */
+  html: string;
+  /** 图片 Blob 列表 */
+  images: Blob[];
+}
+
+export interface ChangeListener {
+  /** 销毁变更监听 */
+  destroy: () => void;
+}
+
+export interface ChangeData {
+  /** 变更后的剪贴板文本 */
+  text: string;
+}
+
 export type ImageSource = Blob | File | HTMLImageElement | HTMLCanvasElement | string;
 
 /** 事件映射 */
@@ -139,9 +160,10 @@ declare class NowClipboard {
   /**
    * 剪切元素内容（仅浏览器）
    * @param element - 目标元素
+   * @param options - 重试配置
    * @returns 剪切的文本
    */
-  static cut(element: Element): Promise<string>;
+  static cut(element: Element, options?: RetryOptions): Promise<string>;
 
   /**
    * 读取剪贴板文本
@@ -149,6 +171,13 @@ declare class NowClipboard {
    * @returns 剪贴板文本内容
    */
   static read(options?: RetryOptions): Promise<string>;
+
+  /**
+   * 读取剪贴板富内容（文本、HTML、图片）（仅浏览器，需要 HTTPS + 现代浏览器）
+   * @param options - 重试配置
+   * @returns 剪贴板富内容
+   */
+  static readRich(options?: RetryOptions): Promise<ReadRichResult>;
 
   /**
    * 检测环境是否支持剪贴板操作
@@ -173,6 +202,14 @@ declare class NowClipboard {
   static onPaste(target: string | Element | null, callback: (data: PasteData) => void): PasteListener;
 
   /**
+   * 监听剪贴板内容变更（仅浏览器，轮询方式）
+   * @param callback - 变更回调，接收 { text }
+   * @param interval - 轮询间隔 ms，默认 1000
+   * @returns 监听器对象，包含 destroy 方法
+   */
+  static onChange(callback: (data: ChangeData) => void, interval?: number): ChangeListener;
+
+  /**
    * 复制图片到剪贴板（仅浏览器，需要 HTTPS + 现代浏览器）
    * @param source - 图片源（Blob、File、HTMLImageElement、HTMLCanvasElement 或图片 URL）
    * @param options - 重试配置
@@ -191,7 +228,7 @@ declare class NowClipboard {
 
   /**
    * 复制富文本（HTML + 纯文本）到剪贴板（仅浏览器）
-   * @param options - 富文本配置 { text, html, container?, retries?, retryDelay?, timeout? }
+   * @param options - 富文本配置 { text, html, container?, retries?, retryDelay?, timeout?, signal? }
    * @returns 复制的富文本内容
    */
   static copyRich(options: RichTextOptions): Promise<{ text: string; html: string }>;
