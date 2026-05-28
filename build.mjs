@@ -1,5 +1,5 @@
 /**
- * NowClipboard Build Script
+ * NowClipboard Build Script v1.1.7
  * Uses esbuild to generate UMD, ESM, and minified bundles
  */
 import { build } from 'esbuild';

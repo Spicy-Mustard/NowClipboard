@@ -1,3 +1,6 @@
+/**
+ * NowClipboard Test Config v1.1.7
+ */
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
